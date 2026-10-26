@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Launch Shiny App",
+			"type": "shell",
+			"command": "Rscript",
+			"args": [
+				"-e",
+				"shiny::runApp('.', launch.browser = TRUE)"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}

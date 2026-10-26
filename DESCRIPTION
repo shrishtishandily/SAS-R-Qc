@@ -1,0 +1,9 @@
+Package: adamqcworkbench
+Title: Synthetic ADaM QC Workbench Prototype
+Version: 0.1.0
+Authors@R: person("Prototype", "Team", role = c("aut", "cre"), email = "prototype@example.invalid")
+Description: A synthetic-only Shiny prototype demonstrating bounded human-in-the-loop independent QC workflow for SAS-to-R migration. No clinical data, external services, or execution engines are included.
+License: MIT
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports: shiny
