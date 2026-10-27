@@ -1,23 +1,20 @@
-WORKFLOW_STATES <- c(
-  "setup", "review", "ready_to_compare", "compared", "dispositioned", "approved"
-)
+WORKFLOW_STATES <- c("intake", "configured", "compared", "dispositioned", "approved")
 
 WORKFLOW_LABELS <- c(
-  setup = "Task setup",
-  review = "Code review",
-  ready_to_compare = "Ready to compare",
-  compared = "Comparison complete",
-  dispositioned = "Disposition recorded",
-  approved = "Human approved"
+  intake = "Intake",
+  configured = "Ready to compare",
+  compared = "Compared",
+  dispositioned = "Dispositioned",
+  approved = "Approved"
 )
 
+# Forward path is linear; any state may return to intake when inputs change.
 allowed_transitions <- list(
-  setup = "review",
-  review = "ready_to_compare",
-  ready_to_compare = "compared",
-  compared = "dispositioned",
-  dispositioned = "approved",
-  approved = character()
+  intake = "configured",
+  configured = c("compared", "intake"),
+  compared = c("dispositioned", "configured", "intake"),
+  dispositioned = c("approved", "configured", "intake"),
+  approved = c("configured", "intake")
 )
 
 can_transition <- function(from, to) {

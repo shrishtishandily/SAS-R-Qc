@@ -1,14 +1,12 @@
 source(file.path("R", "workflow.R"))
 
-stopifnot(identical(WORKFLOW_STATES, c(
-  "setup", "review", "ready_to_compare", "compared", "dispositioned", "approved"
-)))
-stopifnot(can_transition("setup", "review"))
+stopifnot(identical(WORKFLOW_STATES, c("intake", "configured", "compared", "dispositioned", "approved")))
+stopifnot(can_transition("intake", "configured"))
+stopifnot(can_transition("configured", "compared"))
 stopifnot(can_transition("compared", "dispositioned"))
 stopifnot(can_transition("dispositioned", "approved"))
-stopifnot(!can_transition("setup", "compared"))
-stopifnot(!can_transition("approved", "setup"))
-stopifnot(identical(transition_workflow("review", "ready_to_compare"), "ready_to_compare"))
-
-invalid_transition <- try(transition_workflow("setup", "approved"), silent = TRUE)
-stopifnot(inherits(invalid_transition, "try-error"))
+stopifnot(can_transition("approved", "intake"))
+stopifnot(!can_transition("intake", "compared"))
+stopifnot(!can_transition("compared", "approved"))
+stopifnot(identical(transition_workflow("configured", "compared"), "compared"))
+stopifnot(inherits(try(transition_workflow("intake", "approved"), silent = TRUE), "try-error"))
