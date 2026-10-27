@@ -1,6 +1,6 @@
 app_ui <- shiny::fluidPage(
   shiny::tags$head(
-    shiny::title("ADaM QC Workbench | Synthetic prototype"),
+    shiny::tags$title("ADaM QC Workbench | Synthetic prototype"),
     shiny::tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
   ),
   shiny::div(
