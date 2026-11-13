@@ -1,92 +1,71 @@
 # ADaM QC Workbench
 
-A standard Shiny prototype for bounded, human-in-the-loop independent QC of ADaM datasets during SAS-to-R migration. You upload a SAS reference dataset and an R QC dataset (plus the programs, for review), run a deterministic comparison, disposition each finding, and approve the outcome with a session audit log.
+A human-gated Shiny prototype for a sequential ADaM workflow: register study documents and source SDTM, approve a requirements baseline, register production R code and its externally generated output, trace the R output, review an independent SAS QC draft, register its externally generated output, trace the SAS result, deterministically compare both datasets, review differences, record external CDISC validation review, and sign off a draft report.
 
-> **Prototype limitations:** not a validated system and not for regulatory submission. No AI/LLM, SAS runner, external service, database, or credential is used. Identity is a self-declared name, the audit log lives only in the session, and approvals are not electronic signatures. Upload only data you are authorized to handle on the machine running the app.
+See [ARCHITECTURE_BLUEPRINT.md](ARCHITECTURE_BLUEPRINT.md) for the target architecture, separation-of-duties model, requirements traceability, approval gates, comparison policy, reporting, and validation roadmap.
+
+> **Prototype limitations:** This is not a validated system and not for clinical, regulatory, or production use. It does not interpret document contents, generate R or SAS code, execute uploaded R or SAS programs, launch SAS, or connect to Pinnacle 21 / CDISC CORE. Program execution and standards validation must happen outside the prototype. Its UI hides R source during SAS review but cannot enforce technical blinding because this is one local Shiny process. Reviewer names are unauthenticated, approvals are not electronic signatures, uploaded files and audit records are session-local, and the audit log is not durable or tamper-evident. Use synthetic data only in this prototype.
 
 ## Workflow
 
-`intake → configured → compared → dispositioned → approved`
+The enforced forward sequence is:
 
-The state machine in `R/workflow.R` is enforced by `transition_workflow()`. Any change to an input (new upload, re-run settings) discards results, dispositions, and approval and returns the workflow to an earlier state; the invalidation is recorded in the audit log.
+`Study inputs → Requirements baseline → Production R → R traceability → Independent SAS QC review → SAS QC output → SAS traceability → Deterministic comparison → Difference review → CDISC review → Report and sign-off`
 
-| Tab | What happens |
+Each next step is gated on required human approvals. The SAS output screen is reachable only after a reviewer approves the exact SAS source checksum. Registering output requires a confirmation that its executed-code checksum matches. The final draft sign-off is blocked until each prior gate and each comparison finding has a human disposition. Changes to program uploads reset their approvals and dependent output.
+
+| Phase | Prototype behavior |
 |---|---|
-| 1 Intake | Enter reviewer name; upload reference and QC datasets (`.xpt`, `.sas7bdat`, `.csv`) and optional SAS / R programs; confirm intake. **Load synthetic demo** loads a small generated example. |
-| 2 Code review | Programs shown read-only; record a checklist-based review. |
-| 3 Run & compare | Choose key variables and numeric tolerance; run the comparator. |
-| 4 Findings | Each finding shows evidence, an optional rule-based hint, and a human disposition form. |
-| 5 Approval | Readiness checks, approval statement, attestation; download findings and audit CSVs. |
-| 6 Audit | Append-only session event log. |
+| Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, and SDTM datasets; enter document type/version and task/reviewer. Document contents are not extracted. |
+| Requirements baseline | Manually enter source-cited requirements, conflict status, resolution, and human approval. |
+| Production R | Register and review R source/checksum; approve it; run it externally; register the output and run-manifest reference. |
+| R traceability | Manually link each requirement to document/source, R program line, output evidence, and coverage; reviewer approves the trace. |
+| Independent SAS QC | Upload independently authored SAS draft; review code, citations, and assumptions; approve its checksum. SAS generation is not implemented. |
+| SAS QC output | Run the approved SAS program externally and register output, SAS version/log reference, and executed checksum. |
+| SAS traceability | Manually link requirements to SAS lines and output evidence; reviewer approves. |
+| Deterministic comparison | Choose key variables and numeric tolerance; approve the comparison profile; compare output datasets using the prototype comparator. Source programs are not passed to the comparator. |
+| Difference review | Inspect exact finding evidence and rule-based hints; record possible cause, source references, rationale, and human verified/rejected/needs-investigation disposition. Findings without a final disposition block sign-off. |
+| CDISC review | Upload external validation report(s), identify validator/ruleset/standards versions, and record human review. Validation itself is not run by the prototype. |
+| Report/sign-off | Review a consolidated CSV report and audit CSV; enter a conclusion and attest. Sign-off is session-local and not a validated signature. |
 
-## Evidence labels
+## Provenance labels and interpretation
 
-- **Deterministic comparator result:** structure, record, and value differences computed by `R/compare.R`.
-- **Rule-based hint (not AI):** fixed pattern checks over differing records (for example, "ADT is missing in the reference for 100% of differing records"). Hints describe patterns; they do not establish root cause.
-- **Human disposition:** decisions and rationale entered by the reviewer.
+- **Deterministic comparator result:** calculated from the two registered output datasets by `R/compare.R`.
+- **Rule-based hint (not AI):** a fixed pattern check, not a model conclusion or root cause.
+- **Human disposition / approval:** the reviewer’s recorded decision, rationale, and prototype attestation.
+- **CDISC validation:** results from the uploaded external validator report; independent of code-to-spec traceability and output comparison.
 
-## Comparison rules
+A matching result does not prove that either implementation meets study intent. A CDISC validator result does not prove program correctness. Any unresolved, uncited, or unverified requirement must remain visible.
 
-- Records are matched on the selected key variables (or by row order if none). Duplicate keys are reported; only the first record per key is compared.
-- Column names are upper-cased. Character values are trimmed, and blank equals missing. Numeric values compare within an absolute tolerance (default `1e-8`). Dates compare as numbers; numeric-vs-character columns are compared numerically when every value converts.
-- Findings cover variables on one side only, type mismatches, duplicate keys, records on one side only, and per-variable value differences.
+## Comparator behavior
 
-## Requirements
+The prototype uses its own deterministic R implementation rather than `diffdf` or SAS `PROC COMPARE`. It compares common variables after matching records on selected keys, checks one-sided variables/records, duplicate keys, type differences, missingness, and value differences. Key variables are required in the staged workflow; row-order matching is disabled there. Numeric comparison uses an absolute tolerance (default `1e-8`). Character trimming, date conversion, and type-conversion behavior are implemented in `R/compare.R`. Review and validate these semantics for the intended standards before relying on them; this prototype comparator is not formally validated.
+
+## Requirements and launch
 
 - R 4.1 or later
-- Packages `shiny` and `haven`
+- `shiny` and `haven`
 
 ```r
 install.packages(c("shiny", "haven"))
-```
-
-## Launch
-
-Start the app from the project directory (the `www/` styles are served only when the app directory is used):
-
-```r
 shiny::runApp("path/to/adam-qc-workbench")
 ```
 
-In Positron or RStudio you can also open `app.R` and use **Run App**. Uploads up to 200 MB are accepted.
+Launch from the project directory so `www/` styles resolve. The app is not automatically launched during setup.
 
-## Optional local R program execution
+## Data handling and audit limits
 
-Disabled by default: uploaded programs are displayed only, and SAS programs are never executed. To let the app run an uploaded **R** program, set the environment variable before launching:
-
-```r
-Sys.setenv(ADAM_QC_ALLOW_R_EXEC = "true")
-shiny::runApp("path/to/adam-qc-workbench")
-```
-
-The program runs in a separate local R process (120 s limit) with your own permissions. **This is not a sandbox**; run only programs you trust. It must write `qc_output.csv` or `qc_output.xpt` in its working directory; optional input files are copied there. The output becomes the QC dataset.
-
-## Least-privilege design notes
-
-- Upload types and sizes are restricted; `.rds` and other serialized R objects are not accepted.
-- Uploaded values are rendered as escaped text only, never as HTML.
-- No network calls, persistence, credentials, or external services. Files stay in temporary session storage.
-- The audit log records actions, file names, row counts, and checksums, not data values (dispositions and rationales are recorded as entered).
-- A production deployment would need authenticated identity and role-based authorization, isolated execution, governed storage, tamper-evident audit retention, and validation.
-
-## Project structure
-
-- `app.R`: entry point
-- `R/workflow.R`: state machine
-- `R/compare.R`, `R/findings.R`: deterministic comparator and finding builder
-- `R/io.R`: validated dataset and program readers
-- `R/exec.R`: optional local R execution
-- `R/audit.R`, `R/utils.R`, `R/data.R` (synthetic demo)
-- `R/mod_*.R`: Shiny modules for each tab; `R/ui.R`, `R/server.R`
-- `www/styles.css`: styling
-- `tests/`: `test_workflow.R`, `test_compare.R`, `test_server.R`
+The app accepts supported tabular formats as restricted by `R/io.R`. It records file names/checksums and comparison evidence; it does not persist uploads or task state across sessions. The event log is only a session log. A production deployment requires authenticated roles, technical branch isolation, controlled execution, governed durable storage, integrity-protected audit records, validated signing, security review, formal system validation, and applicable SOPs.
 
 ## Tests
 
-From the project directory:
+Run from the project directory:
 
 ```r
-for (f in list.files("tests", full.names = TRUE)) source(f)
+source("tests/test_workflow.R")
+source("tests/test_compare.R")
+source("tests/test_server.R")
+source("tests/test_pipeline.R")
 ```
 
-`test_server.R` walks the full workflow headlessly with `shiny::testServer()`; no app is launched.
+The tests use synthetic fixtures and Shiny's headless `testServer()`; they do not launch the app or run uploaded programs.

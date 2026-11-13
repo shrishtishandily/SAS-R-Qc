@@ -1,0 +1,205 @@
+.phase-heading {
+    margin: 8px 0 16px
+}
+
+.phase-heading h2 {
+    font-size: 22px;
+    margin: 4px 0
+}
+
+.phase-heading p {
+    color: #667781;
+    margin: 0;
+    font-size: 13px
+}
+
+.phase-heading+.panel {
+    margin-top: 0
+}
+
+.phase-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px
+}
+
+.artifact-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) 190px 140px minmax(200px, 2fr);
+    gap: 10px;
+    align-items: center;
+    border-bottom: 1px solid #eef1f2;
+    padding: 8px 0
+}
+
+.artifact-row .form-group {
+    margin: 0
+}
+
+.artifact-row .control-label {
+    font-size: 10px
+}
+
+.artifact-row .form-control {
+    height: 32px;
+    padding: 5px 8px;
+    font-size: 12px
+}
+
+.finding-panel {
+    border-color: #e6dcc9
+}
+
+.finding-panel h3 {
+    font-size: 16px;
+    margin: 0
+}
+
+.finding-panel .label-row {
+    margin: 12px 0 6px
+}
+
+.finding-panel .form-group {
+    margin-top: 10px
+}
+
+.finding-panel .form-control {
+    max-width: 100%
+}
+
+.finding-panel .hint-card {
+    background: #fff8ec;
+    border: 1px solid #f2e8d6;
+    padding: 10px 12px;
+    border-radius: 8px
+}
+
+.finding-panel .hint-card p {
+    color: #71634e
+}
+
+.finding-panel>strong {
+    display: block;
+    color: #a87937;
+    font-size: 12px;
+    margin: 12px 0 4px
+}
+
+.loaded-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px;
+    margin: 10px 0
+}
+
+.loaded-card {
+    border: 1px solid #e1e7e9;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fafcfc;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px
+}
+
+.loaded-card strong {
+    color: #52646c;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em
+}
+
+.checklist {
+    list-style: none;
+    padding: 0
+}
+
+.empty-note {
+    color: #667781;
+    background: #f6f8f8;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px
+}
+
+.warn-note {
+    background: #fff6e8;
+    color: #805d25;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    margin: 8px 0
+}
+
+.ok-note {
+    background: #e8f5f2;
+    color: #2c6e62;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    margin: 8px 0
+}
+
+.label-row {
+    margin: 8px 0
+}
+
+.phase-heading+.panel>.btn-secondary-wide,
+.phase-heading+.panel>.btn-primary-wide {
+    margin: 6px 6px 6px 0
+}
+
+.panel .form-group {
+    margin-bottom: 12px
+}
+
+.nav-pills {
+    margin-top: 14px
+}
+
+.footer {
+    margin-top: 18px
+}
+
+@media(max-width:850px) {
+    .artifact-row {
+        grid-template-columns: 1fr 1fr
+    }
+
+    .phase-actions {
+        flex-wrap: wrap
+    }
+
+    .workflow-step {
+        min-width: 145px
+    }
+}
+
+@media(max-width:550px) {
+    .artifact-row {
+        grid-template-columns: 1fr
+    }
+
+    .phase-heading h2 {
+        font-size: 19px
+    }
+
+    .page-wrap {
+        padding: 18px 12px
+    }
+
+    .topbar {
+        padding: 0 12px
+    }
+
+    .workflow-strip {
+        padding: 10px
+    }
+
+    .workflow-step {
+        min-width: 135px
+    }
+}

@@ -1,10 +1,17 @@
 source_files <- c(
-  "utils", "workflow", "audit", "io", "compare", "findings", "exec", "data",
-  "mod_intake", "mod_code", "mod_compare", "mod_findings", "mod_approval", "mod_audit",
-  "ui", "server"
+  "utils",
+  "audit",
+  "io",
+  "compare",
+  "findings",
+  "data",
+  "pipeline_ui",
+  "pipeline_server"
 )
-for (f in source_files) source(file.path("R", paste0(f, ".R")), local = TRUE)
+for (f in source_files) {
+  source(file.path("R", paste0(f, ".R")), local = TRUE)
+}
 
 options(shiny.maxRequestSize = MAX_DATA_BYTES)
 
-shiny::shinyApp(ui = app_ui, server = app_server)
+shiny::shinyApp(ui = pipeline_ui, server = pipeline_server)
