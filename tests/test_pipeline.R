@@ -34,8 +34,81 @@ stopifnot(
 )
 stopifnot(nrow(merge_document_registry(empty_documents, first_batch)) == 2L)
 
+first_sdtm_batch <- list("dm.xpt" = data.frame(USUBJID = "SYN-001"))
+second_sdtm_batch <- list("ae.xpt" = data.frame(USUBJID = "SYN-001"))
+all_sdtm <- merge_dataset_registry(first_sdtm_batch, second_sdtm_batch)
+stopifnot(setequal(names(all_sdtm), c("dm.xpt", "ae.xpt")))
+replaced_sdtm <- merge_dataset_registry(
+  all_sdtm,
+  list("dm.xpt" = data.frame(USUBJID = "SYN-002"))
+)
+stopifnot(
+  length(replaced_sdtm) == 2L,
+  replaced_sdtm[["dm.xpt"]]$USUBJID == "SYN-002"
+)
+supporting_adam <- merge_dataset_registry(
+  list("adsl.xpt" = data.frame(USUBJID = "SYN-001")),
+  list("advs.xpt" = data.frame(USUBJID = "SYN-001"))
+)
+stopifnot(setequal(names(supporting_adam), c("adsl.xpt", "advs.xpt")))
+
 shiny::testServer(pipeline_server, {
   stopifnot(s$phase == "workspace")
+
+  dm_path <- tempfile(fileext = ".csv")
+  ae_path <- tempfile(fileext = ".csv")
+  adsl_path <- tempfile(fileext = ".csv")
+  adlb_path <- tempfile(fileext = ".csv")
+  warmup_sdtm_path <- tempfile(fileext = ".csv")
+  warmup_adam_path <- tempfile(fileext = ".csv")
+  utils::write.csv(data.frame(USUBJID = "SYN-001"), dm_path, row.names = FALSE)
+  utils::write.csv(
+    data.frame(USUBJID = "SYN-001", AETERM = "Example"),
+    ae_path,
+    row.names = FALSE
+  )
+  utils::write.csv(
+    data.frame(USUBJID = "SYN-001", SAFFL = "Y"),
+    adsl_path,
+    row.names = FALSE
+  )
+  utils::write.csv(
+    data.frame(USUBJID = "SYN-001", AVAL = 12),
+    adlb_path,
+    row.names = FALSE
+  )
+  utils::write.csv(
+    data.frame(USUBJID = "WARMUP"),
+    warmup_sdtm_path,
+    row.names = FALSE
+  )
+  utils::write.csv(
+    data.frame(USUBJID = "WARMUP"),
+    warmup_adam_path,
+    row.names = FALSE
+  )
+
+  upload_record <- function(path) {
+    data.frame(
+      name = basename(path),
+      size = file.info(path)[["size"]],
+      type = "text/csv",
+      datapath = path,
+      stringsAsFactors = FALSE
+    )
+  }
+  session$setInputs(sdtm_files = upload_record(warmup_sdtm_path))
+  session$setInputs(sdtm_files = upload_record(dm_path))
+  session$setInputs(sdtm_files = upload_record(ae_path))
+  stopifnot(setequal(names(s$sdtm), c(basename(dm_path), basename(ae_path))))
+
+  session$setInputs(supporting_adam_files = upload_record(warmup_adam_path))
+  session$setInputs(supporting_adam_files = upload_record(adsl_path))
+  session$setInputs(supporting_adam_files = upload_record(adlb_path))
+  stopifnot(setequal(
+    names(s$supporting_adam),
+    c(basename(warmup_adam_path), basename(adsl_path), basename(adlb_path))
+  ))
 
   session$setInputs(advance = 1)
   stopifnot(s$phase == "workspace")
@@ -173,5 +246,14 @@ shiny::testServer(pipeline_server, {
       "Human sign-off recorded"
     ) %in%
       s$audit$event
+  ))
+
+  unlink(c(
+    dm_path,
+    ae_path,
+    adsl_path,
+    adlb_path,
+    warmup_sdtm_path,
+    warmup_adam_path
   ))
 })
