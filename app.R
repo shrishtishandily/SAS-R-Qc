@@ -2,6 +2,7 @@ source_files <- c(
   "utils",
   "audit",
   "io",
+  "extract_requirements",
   "compare",
   "findings",
   "data",

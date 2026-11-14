@@ -125,6 +125,16 @@ shiny::testServer(pipeline_server, {
     stringsAsFactors = FALSE
   )
   s$sdtm <- list("vs.xpt" = data.frame(USUBJID = "SYN-001", VSORRES = "70"))
+  s$requirement_candidates <- data.frame(
+    requirement_id = "REQ-001",
+    target = "ADVS.BASE",
+    source_ref = "synthetic-adam-spec.pdf v1.0; section 1",
+    rule = "Extracted synthetic baseline requirement",
+    source_file = "synthetic-adam-spec.pdf",
+    evidence = "Synthetic baseline requirement excerpt",
+    extraction_type = "Synthetic test candidate",
+    stringsAsFactors = FALSE
+  )
   session$setInputs(advance = 2)
   stopifnot(s$phase == "requirements")
 
@@ -136,6 +146,11 @@ shiny::testServer(pipeline_server, {
     approve_requirements = 1
   )
   stopifnot(s$requirements_approved, s$requirements$requirement_id == "REQ-001")
+  stopifnot(
+    s$requirements$source_file == "synthetic-adam-spec.pdf",
+    s$requirements$evidence == "Synthetic baseline requirement excerpt",
+    s$requirements$extraction_type == "Synthetic test candidate"
+  )
   session$setInputs(advance = 3)
   stopifnot(s$phase == "production_r")
 

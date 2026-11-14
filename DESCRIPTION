@@ -6,4 +6,5 @@ Description: A Shiny prototype for bounded, human-in-the-loop independent QC of 
 License: MIT
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
-Imports: shiny, haven
+Imports: shiny, haven, xml2
+Suggests: pdftools, readxl

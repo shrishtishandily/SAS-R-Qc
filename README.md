@@ -16,8 +16,8 @@ Each next step is gated on required human approvals. The SAS output screen is re
 
 | Phase | Prototype behavior |
 |---|---|
-| Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, source SDTM domains, and supporting ADSL/other ADaM datasets; enter document type/version and task/reviewer. Dataset/document pickers accept multiple files and later upload batches accumulate; same-name files replace the prior entry. The generated target ADaM output is uploaded separately in the Production R phase. Document contents are not extracted. |
-| Requirements baseline | Manually enter source-cited requirements, conflict status, resolution, and human approval. |
+| Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, source SDTM domains, and supporting ADSL/other ADaM datasets; enter document type/version and task/reviewer. Dataset/document pickers accept multiple files and later upload batches accumulate; same-name files replace the prior entry. The generated target ADaM output is uploaded separately in the Production R phase. |
+| Requirements baseline | Extract draft candidates from registered Define-XML, PDFs, DOCX, text, CSV, and Excel files; review exact source citations/evidence, edit the candidate rules, resolve conflicts, and obtain human approval. Extraction does not determine correctness or approve a baseline. |
 | Production R | Register and review R source/checksum; approve it; run it externally; register the output and run-manifest reference. |
 | R traceability | Manually link each requirement to document/source, R program line, output evidence, and coverage; reviewer approves the trace. |
 | Independent SAS QC | Upload independently authored SAS draft; review code, citations, and assumptions; approve its checksum. SAS generation is not implemented. |
@@ -44,10 +44,10 @@ The prototype uses its own deterministic R implementation rather than `diffdf` o
 ## Requirements and launch
 
 - R 4.1 or later
-- `shiny` and `haven`
+- `shiny`, `haven`, and `xml2`; `pdftools` and `readxl` enable PDF and Excel extraction
 
 ```r
-install.packages(c("shiny", "haven"))
+install.packages(c("shiny", "haven", "xml2", "pdftools", "readxl"))
 shiny::runApp("path/to/adam-qc-workbench")
 ```
 
@@ -55,7 +55,7 @@ Launch from the project directory so `www/` styles resolve. The app is not autom
 
 ## Data handling and audit limits
 
-The app accepts supported tabular formats as restricted by `R/io.R`. It records file names/checksums and comparison evidence; it does not persist uploads or task state across sessions. The event log is only a session log. A production deployment requires authenticated roles, technical branch isolation, controlled execution, governed durable storage, integrity-protected audit records, validated signing, security review, formal system validation, and applicable SOPs.
+The requirements phase extracts draft candidates from Define-XML dataset/variable metadata and relevant text passages from PDF, DOCX, TXT, CSV, and Excel files. Candidates include document/version and a Define-XML object, PDF page, DOCX paragraph, or spreadsheet-sheet citation where available. Define-XML is scoped to the ADaM dataset named in the task when it can be identified. PDF extraction is text-based and may miss scanned pages or table structure; no OCR or semantic interpretation is performed. Extraction does not establish correctness or resolve conflicts. Reviewers must inspect the evidence, edit the candidate rules, address conflicts, and attest before the baseline can be approved. The app accepts supported tabular formats as restricted by `R/io.R`. It records file names/checksums and comparison evidence; it does not persist uploads or task state across sessions. The event log is only a session log. A production deployment requires authenticated roles, technical branch isolation, controlled execution, governed durable storage, integrity-protected audit records, validated signing, security review, formal system validation, and applicable SOPs.
 
 ## Tests
 
@@ -66,6 +66,7 @@ source("tests/test_workflow.R")
 source("tests/test_compare.R")
 source("tests/test_server.R")
 source("tests/test_pipeline.R")
+source("tests/test_extraction.R")
 ```
 
 The tests use synthetic fixtures and Shiny's headless `testServer()`; they do not launch the app or run uploaded programs.

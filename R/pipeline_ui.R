@@ -78,7 +78,7 @@ pipeline_ui <- function(request) {
           shiny::div(
             shiny::strong("Prototype — not a validated system"),
             shiny::p(
-              "This app does not extract document requirements, generate R/SAS code, execute programs, or connect to Pinnacle 21 / CDISC CORE. R and SAS runs and validator checks happen externally and are registered for review. The UI hides production R source during SAS review but cannot enforce technical blinding in this single local Shiny process. Use synthetic data only; do not treat session approval or audit as validated."
+              "Document extraction creates draft candidates with citations for mandatory human review; it does not resolve conflicts or approve requirements. This app does not generate R/SAS code, execute programs, or connect to Pinnacle 21 / CDISC CORE. R and SAS runs and validator checks happen externally. The UI hides production R source during SAS review but cannot enforce technical blinding in this single local Shiny process. Use synthetic data only; do not treat session approval or audit as validated."
             )
           )
         ),

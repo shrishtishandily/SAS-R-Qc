@@ -17,6 +17,8 @@ new_pipeline_store <- function() {
     supporting_adam_meta = list(),
     artifacts = list(),
     requirements = NULL,
+    requirement_candidates = empty_requirement_candidates(),
+    requirement_extraction_issues = character(),
     requirements_approved = FALSE,
     r_program = NULL,
     r_meta = NULL,
@@ -121,6 +123,8 @@ pipeline_server <- function(input, output, session) {
   reset_after <- function(boundary, reason) {
     if (boundary == "workspace") {
       s$requirements <- NULL
+      s$requirement_candidates <- empty_requirement_candidates()
+      s$requirement_extraction_issues <- character()
       s$requirements_approved <- FALSE
       s$r_program <- NULL
       s$r_meta <- NULL
@@ -322,14 +326,26 @@ pipeline_server <- function(input, output, session) {
       ),
       requirements = panel(
         "Build and approve the requirements baseline",
-        "Manually record traceable rules from approved study documents. Conflicts and assumptions require human resolution.",
+        "Extract candidate requirements from registered study documents, then verify citations, edit the draft, resolve conflicts, and obtain human approval.",
         shiny::p(
           class = "field-help",
-          "One requirement per line: ID | target dataset.variable | source document/version/page or section | derivation / acceptance rule."
+          "Extraction creates candidates only. Define-XML supplies dataset/variable metadata; PDF, Word, text, CSV, and Excel extract relevant passages with page, paragraph, sheet, or document citations where available. It does not determine correctness or resolve conflicts."
+        ),
+        shiny::actionButton(
+          ns("extract_requirements"),
+          "Extract candidates from registered documents",
+          class = "btn-secondary-wide"
+        ),
+        shiny::uiOutput(ns("candidate_status")),
+        shiny::uiOutput(ns("candidate_view")),
+        shiny::actionButton(
+          ns("insert_candidates"),
+          "Insert draft candidates into editable requirements",
+          class = "btn-ghost"
         ),
         shiny::textAreaInput(
           ns("requirement_text"),
-          "Study requirements",
+          "Editable study requirements (one per line: ID | target dataset.variable | source citation | rule)",
           rows = 8,
           placeholder = "REQ-001 | ADSL.SAFFL | ADaM spec v1, §3.1 | Set Y for subjects in the safety population"
         ),
@@ -345,7 +361,7 @@ pipeline_server <- function(input, output, session) {
         ),
         shiny::checkboxInput(
           ns("req_attest"),
-          "I verified the cited source documents and approve this baseline version.",
+          "I reviewed and edited the extracted candidates, verified each cited source, resolved or documented conflicts, and approve this baseline version.",
           FALSE
         ),
         shiny::actionButton(
@@ -655,7 +671,56 @@ pipeline_server <- function(input, output, session) {
     if (is.null(s$requirements)) {
       return(NULL)
     }
-    html_table(s$requirements)
+    columns <- intersect(
+      c(
+        "requirement_id",
+        "target",
+        "source_ref",
+        "rule",
+        "source_file",
+        "extraction_type",
+        "evidence"
+      ),
+      names(s$requirements)
+    )
+    html_table(s$requirements[, columns, drop = FALSE], max_rows = 500L)
+  })
+  output$candidate_status <- shiny::renderUI({
+    if (length(s$requirement_extraction_issues)) {
+      return(shiny::div(
+        class = "warn-note",
+        paste(
+          "Some documents could not be extracted:",
+          paste(s$requirement_extraction_issues, collapse = "; ")
+        )
+      ))
+    }
+    if (!nrow(s$requirement_candidates)) {
+      return(shiny::div(
+        class = "empty-note",
+        "No candidate extraction has been run yet. Extracted text and metadata are drafts, not approved requirements."
+      ))
+    }
+    shiny::div(
+      class = "warn-note",
+      sprintf(
+        "%d draft candidates extracted. Review source citations and evidence below; extraction is not an approval.",
+        nrow(s$requirement_candidates)
+      )
+    )
+  })
+  output$candidate_view <- shiny::renderUI({
+    if (!nrow(s$requirement_candidates)) {
+      return(NULL)
+    }
+    cols <- c(
+      "requirement_id",
+      "target",
+      "source_ref",
+      "extraction_type",
+      "evidence"
+    )
+    html_table(s$requirement_candidates[, cols, drop = FALSE], max_rows = 300L)
   })
   output$r_program_view <- shiny::renderUI({
     if (is.null(s$r_meta)) {
@@ -960,6 +1025,96 @@ pipeline_server <- function(input, output, session) {
     ignoreInit = TRUE
   )
 
+  shiny::observeEvent(input$extract_requirements, {
+    if (!nrow(s$docs)) {
+      return(shiny::showNotification(
+        "Register study documents before extracting candidates.",
+        type = "warning"
+      ))
+    }
+    if (s$requirements_approved) {
+      reset_after(
+        "requirements",
+        "Requirements re-extracted from registered documents"
+      )
+      s$requirements_approved <- FALSE
+      s$requirements <- NULL
+    }
+    candidates <- list()
+    issues <- character()
+    for (i in seq_len(nrow(s$docs))) {
+      filename <- s$docs$name[i]
+      path <- s$artifacts[[paste0("document:", filename)]]
+      if (is.null(path) || !file.exists(path)) {
+        issues <- c(issues, paste(filename, "is not available in this session"))
+        next
+      }
+      extracted <- tryCatch(
+        extract_document_candidates(
+          path = path,
+          filename = filename,
+          category = s$docs$category[i],
+          version = s$docs$version[i],
+          target_dataset = s$task
+        ),
+        error = function(e) {
+          issues <<- c(issues, paste(filename, conditionMessage(e)))
+          empty_requirement_candidates()
+        }
+      )
+      if (nrow(extracted)) candidates[[length(candidates) + 1L]] <- extracted
+    }
+    if (length(candidates)) {
+      s$requirement_candidates <- do.call(rbind, candidates)
+      s$requirement_candidates$requirement_id <- sprintf(
+        "REQ-%03d",
+        seq_len(nrow(s$requirement_candidates))
+      )
+      rownames(s$requirement_candidates) <- NULL
+    } else {
+      s$requirement_candidates <- empty_requirement_candidates()
+    }
+    s$requirement_extraction_issues <- issues
+    ctx$log(
+      "Document requirement candidates extracted",
+      sprintf(
+        "documents=%d; candidates=%d; issues=%d; target=%s",
+        nrow(s$docs),
+        nrow(s$requirement_candidates),
+        length(issues),
+        s$task
+      )
+    )
+    if (!nrow(s$requirement_candidates)) {
+      shiny::showNotification(
+        "No candidate requirements were extracted. Check document types, versions, and whether PDFs contain selectable text.",
+        type = "warning",
+        duration = 10
+      )
+    }
+  })
+
+  shiny::observeEvent(input$insert_candidates, {
+    if (!nrow(s$requirement_candidates)) {
+      return(shiny::showNotification(
+        "Extract candidate requirements first.",
+        type = "warning"
+      ))
+    }
+    shiny::updateTextAreaInput(
+      session,
+      "requirement_text",
+      value = paste(
+        candidate_requirement_lines(s$requirement_candidates),
+        collapse = "\n"
+      )
+    )
+    ctx$log(
+      "Draft candidates inserted into editable requirements",
+      sprintf("count=%d; review/edit required", nrow(s$requirement_candidates))
+    )
+  })
+
   shiny::observeEvent(
     input$sdtm_files,
     {
@@ -1073,12 +1228,13 @@ pipeline_server <- function(input, output, session) {
     }
     if (
       !length(lines) ||
+        !nrow(s$requirement_candidates) ||
         !nzchar(trimws(input$conflicts %||% "")) ||
         !nzchar(trimws(input$resolution %||% "")) ||
         !isTRUE(input$req_attest)
     ) {
       return(shiny::showNotification(
-        "Add source-cited requirements, conflict status, resolution rationale, and human attestation.",
+        "Extract document candidates, then review/edit source-cited requirements, document conflicts, rationale, and attestation.",
         type = "warning"
       ))
     }
@@ -1107,11 +1263,28 @@ pipeline_server <- function(input, output, session) {
     s$requirements <- do.call(
       rbind,
       lapply(parts, function(p) {
+        candidate_index <- match(p[1], s$requirement_candidates$requirement_id)
+        candidate <- if (is.na(candidate_index)) {
+          NULL
+        } else {
+          s$requirement_candidates[candidate_index, , drop = FALSE]
+        }
         data.frame(
           requirement_id = p[1],
           target = p[2],
           source_ref = p[3],
           rule = paste(p[-(1:3)], collapse = " | "),
+          source_file = if (is.null(candidate)) {
+            "Human entered"
+          } else {
+            candidate$source_file
+          },
+          evidence = if (is.null(candidate)) "" else candidate$evidence,
+          extraction_type = if (is.null(candidate)) {
+            "Human entered"
+          } else {
+            candidate$extraction_type
+          },
           stringsAsFactors = FALSE
         )
       })
@@ -1911,7 +2084,14 @@ pipeline_report <- function(s) {
         "Requirement",
         s$requirements$requirement_id[i],
         s$requirements$target[i],
-        paste(s$requirements$source_ref[i], s$requirements$rule[i])
+        paste(
+          s$requirements$source_ref[i],
+          s$requirements$rule[i],
+          s$requirements$source_file[i],
+          s$requirements$extraction_type[i],
+          s$requirements$evidence[i],
+          sep = " | "
+        )
       )
     }
   }
