@@ -1,5 +1,39 @@
 source("app.R")
 
+empty_documents <- data.frame(
+  name = character(),
+  category = character(),
+  version = character(),
+  citation_note = character(),
+  md5 = character()
+)
+first_batch <- data.frame(
+  name = c("protocol.pdf", "sap.pdf"),
+  category = c("Protocol", "SAP"),
+  version = c("1", "1"),
+  citation_note = c("", ""),
+  md5 = c("protocol-v1", "sap-v1")
+)
+second_batch <- data.frame(
+  name = "define.xml",
+  category = "Define-XML / metadata",
+  version = "1",
+  citation_note = "",
+  md5 = "define-v1"
+)
+combined <- merge_document_registry(first_batch, second_batch)
+stopifnot(
+  nrow(combined) == 3L,
+  setequal(combined$name, c("protocol.pdf", "sap.pdf", "define.xml"))
+)
+replacement <- transform(first_batch[1, , drop = FALSE], md5 = "protocol-v2")
+combined <- merge_document_registry(combined, replacement)
+stopifnot(
+  nrow(combined) == 3L,
+  combined$md5[combined$name == "protocol.pdf"] == "protocol-v2"
+)
+stopifnot(nrow(merge_document_registry(empty_documents, first_batch)) == 2L)
+
 shiny::testServer(pipeline_server, {
   stopifnot(s$phase == "workspace")
 

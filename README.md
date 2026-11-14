@@ -16,7 +16,7 @@ Each next step is gated on required human approvals. The SAS output screen is re
 
 | Phase | Prototype behavior |
 |---|---|
-| Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, and SDTM datasets; enter document type/version and task/reviewer. Document contents are not extracted. |
+| Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, and SDTM datasets; enter document type/version and task/reviewer. Select multiple documents at once or add later batches; existing entries remain registered. Document contents are not extracted. |
 | Requirements baseline | Manually enter source-cited requirements, conflict status, resolution, and human approval. |
 | Production R | Register and review R source/checksum; approve it; run it externally; register the output and run-manifest reference. |
 | R traceability | Manually link each requirement to document/source, R program line, output evidence, and coverage; reviewer approves the trace. |

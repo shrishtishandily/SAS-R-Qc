@@ -56,6 +56,19 @@ pipeline_next <- c(
   cdisc = "signoff"
 )
 
+merge_document_registry <- function(existing, incoming) {
+  if (!nrow(incoming)) {
+    return(existing)
+  }
+  incoming <- incoming[
+    !duplicated(incoming$name, fromLast = TRUE),
+    ,
+    drop = FALSE
+  ]
+  existing <- existing[!existing$name %in% incoming$name, , drop = FALSE]
+  rbind(existing, incoming)
+}
+
 pipeline_transition <- function(store, to, ctx) {
   from <- shiny::isolate(store$phase)
   if (!identical(unname(pipeline_next[[from]]), to)) {
@@ -259,7 +272,7 @@ pipeline_server <- function(input, output, session) {
         shiny::h3(class = "sub-head", "Study documents"),
         shiny::p(
           class = "field-help",
-          "Register protocol, SAP, ADaM specifications, Define-XML/metadata, SDTM specifications, and other references. This prototype does not extract document contents; human-entered citations are required later."
+          "Select multiple files at once, or add documents in later selections. Previously registered files stay in the list. Register protocol, SAP, ADaM specifications, Define-XML/metadata, SDTM specifications, and other references. This prototype does not extract document contents; human-entered citations are required later."
         ),
         shiny::fileInput(
           ns("documents"),
@@ -872,10 +885,6 @@ pipeline_server <- function(input, output, session) {
       if (s$requirements_approved || s$phase != "workspace") {
         reset_after("workspace", "Study document set changed")
       }
-      s$docs <- data.frame(
-        name = character(), category = character(), version = character(),
-        citation_note = character(), md5 = character()
-      )
       add <- do.call(
         rbind,
         lapply(seq_len(nrow(f)), function(i) {
@@ -889,7 +898,7 @@ pipeline_server <- function(input, output, session) {
           )
         })
       )
-      s$docs <- rbind(s$docs[!s$docs$name %in% add$name, , drop = FALSE], add)
+      s$docs <- merge_document_registry(s$docs, add)
       for (i in seq_len(nrow(f))) {
         s$artifacts[[paste0("document:", basename(f$name[i]))]] <- f$datapath[i]
       }
