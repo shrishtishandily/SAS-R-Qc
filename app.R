@@ -3,6 +3,7 @@ source_files <- c(
   "audit",
   "io",
   "extract_requirements",
+  "local_llm",
   "compare",
   "findings",
   "data",

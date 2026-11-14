@@ -2,9 +2,9 @@ Package: adamqcworkbench
 Title: ADaM QC Workbench Prototype
 Version: 0.1.0
 Authors@R: person("Prototype", "Team", role = c("aut", "cre"), email = "prototype@example.invalid")
-Description: A Shiny prototype for bounded, human-in-the-loop independent QC of ADaM datasets during SAS-to-R migration. Deterministic comparison of uploaded datasets with human disposition and a session audit log. No AI, SAS runner, or external services.
+Description: A Shiny prototype for bounded, human-in-the-loop independent QC of ADaM datasets during SAS-to-R migration. Deterministic comparison with optional local Ollama AI suggestions, human disposition, and a session audit log. No hosted AI, SAS runner, or external services.
 License: MIT
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
-Imports: shiny, haven, xml2
+Imports: shiny, haven, xml2, curl, jsonlite
 Suggests: pdftools, readxl

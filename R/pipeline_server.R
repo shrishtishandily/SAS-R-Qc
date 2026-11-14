@@ -11,6 +11,11 @@ new_pipeline_store <- function() {
       citation_note = character(),
       md5 = character()
     ),
+    llm_models = character(),
+    llm_model = "",
+    llm_available = FALSE,
+    llm_enabled = FALSE,
+    llm_status = "Local AI is disabled; no model has been checked.",
     sdtm = list(),
     sdtm_meta = list(),
     supporting_adam = list(),
@@ -19,26 +24,54 @@ new_pipeline_store <- function() {
     requirements = NULL,
     requirement_candidates = empty_requirement_candidates(),
     requirement_extraction_issues = character(),
+    ai_requirement_suggestions = empty_requirement_candidates(),
+    ai_requirement_suggestions_reviewed = FALSE,
+    ai_requirement_suggestions_decision = "",
+    ai_requirement_suggestions_note = "",
     requirements_approved = FALSE,
     r_program = NULL,
     r_meta = NULL,
+    r_ai_review = empty_llm_review(),
+    r_ai_review_reviewed = FALSE,
+    r_ai_review_note = "",
     r_approved = FALSE,
     r_output = NULL,
     r_output_meta = NULL,
+    r_output_ai_review = data.frame(),
+    r_output_ai_reviewed = FALSE,
+    r_output_ai_review_note = "",
     r_trace = NULL,
     r_trace_approved = FALSE,
     sas_program = NULL,
     sas_meta = NULL,
+    sas_generated_by_llm = FALSE,
+    sas_ai_review = empty_llm_review(),
+    sas_ai_review_reviewed = FALSE,
+    sas_ai_review_note = "",
+    sas_ai_assumptions = character(),
+    sas_ai_map = data.frame(
+      requirement_id = character(),
+      code_lines = character()
+    ),
     sas_review = "",
     sas_approved = FALSE,
     sas_output = NULL,
     sas_output_meta = NULL,
+    sas_output_ai_review = data.frame(),
+    sas_output_ai_reviewed = FALSE,
+    sas_output_ai_review_note = "",
     sas_trace = NULL,
     sas_trace_approved = FALSE,
     comparison = NULL,
     comparison_profile = NULL,
     findings = list(),
     triage = list(),
+    ai_triage = data.frame(),
+    ai_triage_reviewed = FALSE,
+    ai_triage_review_note = "",
+    ai_report_summary = data.frame(),
+    ai_report_summary_reviewed = FALSE,
+    ai_report_summary_review_note = "",
     cdisc_reports = data.frame(name = character(), md5 = character()),
     cdisc_notes = "",
     cdisc_approved = FALSE,
@@ -103,6 +136,17 @@ pipeline_server <- function(input, output, session) {
     audit <- shiny::isolate(s$audit)
     reviewer <- shiny::isolate(s$reviewer)
     phase <- shiny::isolate(s$phase)
+    if (
+      grepl("Local LLM", event, ignore.case = TRUE) &&
+        grepl("generated|drafted|failed", event, ignore.case = TRUE)
+    ) {
+      detail <- paste(
+        detail,
+        "prompt_version",
+        LOCAL_LLM_PROMPT_VERSION,
+        sep = "; "
+      )
+    }
     s$audit <- append_audit(
       audit,
       actor = if (nzchar(reviewer)) reviewer else "unidentified reviewer",
@@ -117,6 +161,12 @@ pipeline_server <- function(input, output, session) {
     s$comparison_profile <- NULL
     s$findings <- list()
     s$triage <- list()
+    s$ai_triage <- data.frame()
+    s$ai_triage_reviewed <- FALSE
+    s$ai_triage_review_note <- ""
+    s$ai_report_summary <- data.frame()
+    s$ai_report_summary_reviewed <- FALSE
+    s$ai_report_summary_review_note <- ""
     s$final_approval <- NULL
   }
 
@@ -125,40 +175,78 @@ pipeline_server <- function(input, output, session) {
       s$requirements <- NULL
       s$requirement_candidates <- empty_requirement_candidates()
       s$requirement_extraction_issues <- character()
+      s$ai_requirement_suggestions <- empty_requirement_candidates()
+      s$ai_requirement_suggestions_reviewed <- FALSE
+      s$ai_requirement_suggestions_note <- ""
       s$requirements_approved <- FALSE
       s$r_program <- NULL
       s$r_meta <- NULL
+      s$r_ai_review <- empty_llm_review()
+      s$r_ai_review_reviewed <- FALSE
+      s$r_ai_review_note <- ""
       s$r_approved <- FALSE
       s$r_output <- NULL
       s$r_output_meta <- NULL
+      s$r_output_ai_review <- data.frame()
+      s$r_output_ai_reviewed <- FALSE
+      s$r_output_ai_review_note <- ""
       s$r_trace <- NULL
       s$r_trace_approved <- FALSE
       s$sas_program <- NULL
       s$sas_meta <- NULL
+      s$sas_generated_by_llm <- FALSE
+      s$sas_ai_review <- empty_llm_review()
+      s$sas_ai_review_reviewed <- FALSE
+      s$sas_ai_review_note <- ""
+      s$sas_ai_assumptions <- character()
+      s$sas_ai_map <- data.frame(
+        requirement_id = character(),
+        code_lines = character()
+      )
       s$sas_review <- ""
       s$sas_approved <- FALSE
       s$sas_output <- NULL
       s$sas_output_meta <- NULL
+      s$sas_output_ai_review <- data.frame()
+      s$sas_output_ai_reviewed <- FALSE
+      s$sas_output_ai_review_note <- ""
       s$sas_trace <- NULL
       s$sas_trace_approved <- FALSE
       s$cdisc_reports <- data.frame(name = character(), md5 = character())
       s$cdisc_notes <- ""
       s$cdisc_approved <- FALSE
+      s$llm_enabled <- FALSE
       clear_comparison()
     } else if (boundary == "requirements") {
       s$r_program <- NULL
       s$r_meta <- NULL
+      s$r_ai_review <- empty_llm_review()
       s$r_approved <- FALSE
       s$r_output <- NULL
       s$r_output_meta <- NULL
+      s$r_output_ai_review <- data.frame()
+      s$r_output_ai_reviewed <- FALSE
+      s$r_output_ai_review_note <- ""
       s$r_trace <- NULL
       s$r_trace_approved <- FALSE
       s$sas_program <- NULL
       s$sas_meta <- NULL
+      s$sas_generated_by_llm <- FALSE
+      s$sas_ai_review <- empty_llm_review()
+      s$sas_ai_review_reviewed <- FALSE
+      s$sas_ai_review_note <- ""
+      s$sas_ai_assumptions <- character()
+      s$sas_ai_map <- data.frame(
+        requirement_id = character(),
+        code_lines = character()
+      )
       s$sas_review <- ""
       s$sas_approved <- FALSE
       s$sas_output <- NULL
       s$sas_output_meta <- NULL
+      s$sas_output_ai_review <- data.frame()
+      s$sas_output_ai_reviewed <- FALSE
+      s$sas_output_ai_review_note <- ""
       s$sas_trace <- NULL
       s$sas_trace_approved <- FALSE
       s$cdisc_reports <- data.frame(name = character(), md5 = character())
@@ -169,6 +257,9 @@ pipeline_server <- function(input, output, session) {
       s$r_approved <- FALSE
       s$r_output <- NULL
       s$r_output_meta <- NULL
+      s$r_output_ai_review <- data.frame()
+      s$r_output_ai_reviewed <- FALSE
+      s$r_output_ai_review_note <- ""
       s$r_trace <- NULL
       s$r_trace_approved <- FALSE
       s$cdisc_reports <- data.frame(name = character(), md5 = character())
@@ -183,6 +274,12 @@ pipeline_server <- function(input, output, session) {
       s$sas_approved <- FALSE
       s$sas_output <- NULL
       s$sas_output_meta <- NULL
+      s$sas_output_ai_review <- data.frame()
+      s$sas_output_ai_reviewed <- FALSE
+      s$sas_output_ai_review_note <- ""
+      s$sas_ai_review <- empty_llm_review()
+      s$sas_ai_review_reviewed <- FALSE
+      s$sas_ai_review_note <- ""
       s$sas_trace <- NULL
       s$sas_trace_approved <- FALSE
       s$cdisc_reports <- data.frame(name = character(), md5 = character())
@@ -192,6 +289,9 @@ pipeline_server <- function(input, output, session) {
     } else if (boundary == "sas_output") {
       s$sas_output <- NULL
       s$sas_output_meta <- NULL
+      s$sas_output_ai_review <- data.frame()
+      s$sas_output_ai_reviewed <- FALSE
+      s$sas_output_ai_review_note <- ""
       s$sas_trace <- NULL
       s$sas_trace_approved <- FALSE
       s$cdisc_reports <- data.frame(name = character(), md5 = character())
@@ -331,13 +431,78 @@ pipeline_server <- function(input, output, session) {
           class = "field-help",
           "Extraction creates candidates only. Define-XML supplies dataset/variable metadata; PDF, Word, text, CSV, and Excel extract relevant passages with page, paragraph, sheet, or document citations where available. It does not determine correctness or resolve conflicts."
         ),
+        shiny::div(
+          class = "panel llm-panel",
+          shiny::h3(class = "sub-head", "Optional local AI assistant"),
+          shiny::p(
+            class = "field-help",
+            "No hosted model is used. This connects only to Ollama on this computer (127.0.0.1). Check the local service, select a model, and explicitly enable it for this session. Do not send sensitive study content unless local model use is approved."
+          ),
+          shiny::actionButton(
+            ns("check_local_llm"),
+            "Check local Ollama models",
+            class = "btn-ghost"
+          ),
+          shiny::uiOutput(ns("local_llm_model_picker")),
+          shiny::checkboxInput(
+            ns("local_llm_ack"),
+            "I confirm this local model and the selected documents are approved for this session.",
+            FALSE
+          ),
+          shiny::actionButton(
+            ns("enable_local_llm"),
+            "Enable local AI for this session",
+            class = "btn-secondary-wide"
+          ),
+          shiny::actionButton(
+            ns("disable_local_llm"),
+            "Disable local AI",
+            class = "btn-ghost"
+          ),
+          shiny::uiOutput(ns("local_llm_status"))
+        ),
         shiny::actionButton(
           ns("extract_requirements"),
           "Extract candidates from registered documents",
           class = "btn-secondary-wide"
         ),
+        shiny::actionButton(
+          ns("ai_requirements"),
+          "Ask local AI to organize extracted evidence",
+          class = "btn-secondary-wide"
+        ),
         shiny::uiOutput(ns("candidate_status")),
         shiny::uiOutput(ns("candidate_view")),
+        shiny::uiOutput(ns("ai_requirement_view")),
+        shiny::textAreaInput(
+          ns("ai_requirement_review_note"),
+          "Reviewer disposition of local AI requirement proposals",
+          rows = 2
+        ),
+        shiny::radioButtons(
+          ns("ai_requirement_review_decision"),
+          "Disposition",
+          choices = c(
+            "Accept all and add to editable draft" = "accept",
+            "Reject all" = "reject"
+          ),
+          selected = character()
+        ),
+        shiny::checkboxInput(
+          ns("ai_requirement_review_attest"),
+          "I reviewed all local AI proposals and this accept/reject decision matches the rationale below.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_ai_requirement_review"),
+          "Record AI requirement disposition",
+          class = "btn-ghost"
+        ),
+        shiny::actionButton(
+          ns("append_ai_requirements"),
+          "Add AI proposals as draft requirements",
+          class = "btn-ghost"
+        ),
         shiny::actionButton(
           ns("insert_candidates"),
           "Insert draft candidates into editable requirements",
@@ -374,13 +539,35 @@ pipeline_server <- function(input, output, session) {
       ),
       production_r = panel(
         "Production R program and ADaM generation",
-        "Review and authorize the exact production R program. The prototype does not execute uploaded programs; run approved code in an authorized environment and upload its output and run evidence.",
+        "Review and authorize the exact production R program. The prototype does not execute uploaded programs; run approved code in an authorized environment and upload its output and run evidence. Optional local AI review is advisory and does not approve the run.",
         shiny::fileInput(
           ns("r_program_file"),
           "Production R program (.R, .txt)",
           accept = c(".R", ".r", ".txt")
         ),
         shiny::uiOutput(ns("r_program_view")),
+        shiny::uiOutput(ns("ai_model_badge")),
+        shiny::actionButton(
+          ns("ai_review_r"),
+          "Review R code against approved requirements (local AI)",
+          class = "btn-ghost"
+        ),
+        shiny::uiOutput(ns("r_ai_review_view")),
+        shiny::textAreaInput(
+          ns("r_ai_review_note"),
+          "Reviewer note on local AI code-review proposals",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("r_ai_review_attest"),
+          "I reviewed and verified or dispositioned all local AI R-code review proposals.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_r_ai_review"),
+          "Record AI review disposition",
+          class = "btn-ghost"
+        ),
         shiny::textAreaInput(
           ns("r_review"),
           "Reviewer notes and run plan",
@@ -388,7 +575,7 @@ pipeline_server <- function(input, output, session) {
         ),
         shiny::checkboxInput(
           ns("r_attest"),
-          "I reviewed this exact R program version and authorize its external execution.",
+          "I reviewed this exact R program version, considered any AI review findings, and authorize its external execution.",
           FALSE
         ),
         shiny::actionButton(
@@ -416,22 +603,76 @@ pipeline_server <- function(input, output, session) {
           class = "btn-secondary-wide"
         ),
         shiny::uiOutput(ns("r_output_view")),
+        shiny::actionButton(
+          ns("ai_review_r_output"),
+          "Review R ADaM output against requirements (local AI)",
+          class = "btn-ghost"
+        ),
+        shiny::uiOutput(ns("r_output_ai_review_view")),
+        shiny::textAreaInput(
+          ns("r_output_ai_review_note"),
+          "Reviewer note on local AI dataset-review proposals",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("r_output_ai_review_attest"),
+          "I reviewed and verified or dispositioned all local AI R-output proposals.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_r_output_ai_review"),
+          "Record AI dataset-review disposition",
+          class = "btn-ghost"
+        ),
         advance("Continue to R traceability", "Requirements")
       ),
       trace_r = pipeline_trace_phase_ui(ns, "R"),
       sas_review = panel(
         "Independent SAS QC program",
-        "Use the approved requirements and shared study documents only. This prototype cannot generate SAS. Upload the independently authored draft for human review.",
+        "Use the approved requirements and SDTM source schema only. Local AI can draft SAS here without receiving production R source. Generated SAS remains untrusted draft code and requires human review before external execution.",
         shiny::div(
           class = "warn-note",
           "The UI hides the production R source from this screen, but the prototype is one local Shiny process and does NOT technically enforce blinding. Do not treat this prototype as an independent/blinded QC environment."
         ),
+        shiny::uiOutput(ns("ai_model_badge")),
         shiny::fileInput(
           ns("sas_program_file"),
           "Independent SAS QC draft (.sas, .txt)",
           accept = c(".sas", ".txt")
         ),
+        shiny::actionButton(
+          ns("generate_sas_llm"),
+          "Generate independent SAS draft with local AI",
+          class = "btn-secondary-wide"
+        ),
         shiny::uiOutput(ns("sas_program_view")),
+        shiny::downloadButton(
+          ns("download_sas_draft"),
+          "Download SAS draft",
+          class = "btn-ghost"
+        ),
+        shiny::actionButton(
+          ns("ai_review_sas"),
+          "Review SAS draft against requirements (local AI)",
+          class = "btn-ghost"
+        ),
+        shiny::uiOutput(ns("sas_ai_review_view")),
+        shiny::uiOutput(ns("sas_ai_assumptions_view")),
+        shiny::textAreaInput(
+          ns("sas_ai_review_note"),
+          "Reviewer note on local AI SAS-review proposals",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("sas_ai_review_attest"),
+          "I reviewed and verified or dispositioned all local AI SAS-code review proposals.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_sas_ai_review"),
+          "Record AI review disposition",
+          class = "btn-ghost"
+        ),
         shiny::textAreaInput(
           ns("sas_review"),
           "Human review notes, assumptions, and requirement citations",
@@ -439,7 +680,7 @@ pipeline_server <- function(input, output, session) {
         ),
         shiny::checkboxInput(
           ns("sas_attest"),
-          "I reviewed this exact SAS code checksum against the approved requirements and approve it for execution in an authorized SAS environment.",
+          "I reviewed this exact SAS code checksum against the approved requirements, considered any AI review findings, and approve it for execution in an authorized SAS environment.",
           FALSE
         ),
         shiny::actionButton(
@@ -472,6 +713,27 @@ pipeline_server <- function(input, output, session) {
           class = "btn-secondary-wide"
         ),
         shiny::uiOutput(ns("sas_output_view")),
+        shiny::actionButton(
+          ns("ai_review_sas_output"),
+          "Review SAS QC ADaM output against requirements (local AI)",
+          class = "btn-ghost"
+        ),
+        shiny::uiOutput(ns("sas_output_ai_review_view")),
+        shiny::textAreaInput(
+          ns("sas_output_ai_review_note"),
+          "Reviewer note on local AI dataset-review proposals",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("sas_output_ai_review_attest"),
+          "I reviewed and verified or dispositioned all local AI SAS-output proposals.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_sas_output_ai_review"),
+          "Record AI dataset-review disposition",
+          class = "btn-ghost"
+        ),
         advance("Continue to SAS traceability", "SAS code review")
       ),
       trace_sas = pipeline_trace_phase_ui(ns, "SAS"),
@@ -506,7 +768,29 @@ pipeline_server <- function(input, output, session) {
       ),
       triage = panel(
         "Review differences and proposed explanations",
-        "Comparator results are deterministic. Pattern hints are rule-based, not AI. Explanations are hypotheses—not root-cause findings. Review and disposition every difference.",
+        "Comparator results remain deterministic. Optional local AI may suggest evidence-linked hypotheses; these are not root-cause findings. Review and disposition every difference.",
+        shiny::uiOutput(ns("ai_model_badge")),
+        shiny::actionButton(
+          ns("ai_triage"),
+          "Analyze differences with local AI",
+          class = "btn-secondary-wide"
+        ),
+        shiny::uiOutput(ns("ai_triage_view")),
+        shiny::textAreaInput(
+          ns("ai_triage_review_note"),
+          "Reviewer note on AI discrepancy hypotheses",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("ai_triage_review_attest"),
+          "I reviewed, verified or rejected, and dispositioned all local AI discrepancy hypotheses.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_ai_triage_review"),
+          "Record AI hypothesis review",
+          class = "btn-ghost"
+        ),
         shiny::uiOutput(ns("findings_view")),
         advance("Continue to CDISC checks", "Comparison")
       ),
@@ -544,7 +828,29 @@ pipeline_server <- function(input, output, session) {
       signoff = panel(
         "Consolidated review report and human sign-off",
         "The report keeps traceability, CDISC conformance, deterministic agreement, hypotheses, and human decisions separate. Approval does not confer regulatory validation status.",
+        shiny::uiOutput(ns("ai_model_badge")),
         shiny::uiOutput(ns("report_summary")),
+        shiny::actionButton(
+          ns("ai_report_summary"),
+          "Draft an evidence-linked summary with local AI",
+          class = "btn-ghost"
+        ),
+        shiny::uiOutput(ns("ai_report_summary_view")),
+        shiny::textAreaInput(
+          ns("ai_report_summary_review_note"),
+          "Reviewer note on AI report summary",
+          rows = 2
+        ),
+        shiny::checkboxInput(
+          ns("ai_report_summary_attest"),
+          "I verified the AI summary against its cited report evidence, or rejected it.",
+          FALSE
+        ),
+        shiny::actionButton(
+          ns("save_ai_report_summary_review"),
+          "Record AI summary review",
+          class = "btn-ghost"
+        ),
         shiny::textAreaInput(
           ns("final_statement"),
           "Reviewer conclusion and open items",
@@ -722,6 +1028,107 @@ pipeline_server <- function(input, output, session) {
     )
     html_table(s$requirement_candidates[, cols, drop = FALSE], max_rows = 300L)
   })
+  output$local_llm_model_picker <- shiny::renderUI({
+    if (!length(s$llm_models)) {
+      return(shiny::div(
+        class = "empty-note",
+        "No local models listed yet. Start Ollama locally, then check models."
+      ))
+    }
+    shiny::selectInput(
+      session$ns("llm_model"),
+      "Local model",
+      choices = s$llm_models,
+      selected = if (s$llm_model %in% s$llm_models) {
+        s$llm_model
+      } else {
+        s$llm_models[[1]]
+      }
+    )
+  })
+  output$local_llm_status <- shiny::renderUI({
+    shiny::div(
+      class = if (s$llm_enabled) "ok-note" else "field-help",
+      s$llm_status
+    )
+  })
+  output$ai_model_badge <- shiny::renderUI({
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::div(
+        class = "empty-note",
+        "Local AI is disabled for this session."
+      ))
+    }
+    shiny::div(
+      class = "label-row",
+      pill(paste("LOCAL MODEL:", s$llm_model), "neutral")
+    )
+  })
+  output$ai_requirement_view <- shiny::renderUI({
+    if (!nrow(s$ai_requirement_suggestions)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM PROPOSALS · UNVERIFIED", "hint")
+      ),
+      html_table(s$ai_requirement_suggestions, max_rows = 200L)
+    )
+  })
+  output$r_ai_review_view <- shiny::renderUI({
+    if (is.null(s$r_ai_review) || !nrow(s$r_ai_review)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM CODE REVIEW · PROPOSAL", "hint")
+      ),
+      html_table(s$r_ai_review)
+    )
+  })
+  output$sas_ai_review_view <- shiny::renderUI({
+    if (is.null(s$sas_ai_review) || !nrow(s$sas_ai_review)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM CODE REVIEW · PROPOSAL", "hint")
+      ),
+      html_table(s$sas_ai_review)
+    )
+  })
+  output$sas_ai_assumptions_view <- shiny::renderUI({
+    if (!length(s$sas_ai_assumptions) && !nrow(s$sas_ai_map)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      if (length(s$sas_ai_assumptions)) {
+        shiny::div(
+          class = "warn-note",
+          paste(
+            "AI draft assumptions/questions:",
+            paste(s$sas_ai_assumptions, collapse = " | ")
+          )
+        )
+      },
+      if (nrow(s$sas_ai_map)) html_table(s$sas_ai_map)
+    )
+  })
+  output$ai_triage_view <- shiny::renderUI({
+    if (is.null(s$ai_triage) || !nrow(s$ai_triage)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM HYPOTHESES · NOT ROOT CAUSE", "hint")
+      ),
+      html_table(s$ai_triage)
+    )
+  })
   output$r_program_view <- shiny::renderUI({
     if (is.null(s$r_meta)) {
       return(shiny::div(class = "empty-note", "No R program uploaded."))
@@ -750,17 +1157,37 @@ pipeline_server <- function(input, output, session) {
       )
     )
   })
+  output$r_output_ai_review_view <- shiny::renderUI({
+    if (is.null(s$r_output_ai_review) || !nrow(s$r_output_ai_review)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM SAMPLE-BASED DATA REVIEW · PROPOSAL", "hint")
+      ),
+      html_table(s$r_output_ai_review)
+    )
+  })
   output$sas_program_view <- shiny::renderUI({
     if (is.null(s$sas_meta)) {
       return(shiny::div(class = "empty-note", "No SAS draft uploaded."))
     }
     shiny::tagList(
-      shiny::div(
-        class = "loaded-card",
-        shiny::strong(s$sas_meta$name),
-        paste("MD5", s$sas_meta$md5)
-      ),
-      shiny::tags$pre(class = "code-block", shiny::tags$code(s$sas_program))
+      shiny::tagList(
+        if (isTRUE(s$sas_generated_by_llm)) {
+          shiny::div(
+            class = "warn-note",
+            paste("AI-generated SAS draft · not approved · model", s$llm_model)
+          )
+        },
+        shiny::div(
+          class = "loaded-card",
+          shiny::strong(s$sas_meta$name),
+          paste("MD5", s$sas_meta$md5)
+        ),
+        shiny::tags$pre(class = "code-block", shiny::tags$code(s$sas_program))
+      )
     )
   })
   output$sas_output_view <- shiny::renderUI({
@@ -775,6 +1202,18 @@ pipeline_server <- function(input, output, session) {
         "rows · MD5",
         s$sas_output_meta$md5
       )
+    )
+  })
+  output$sas_output_ai_review_view <- shiny::renderUI({
+    if (is.null(s$sas_output_ai_review) || !nrow(s$sas_output_ai_review)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM SAMPLE-BASED DATA REVIEW · PROPOSAL", "hint")
+      ),
+      html_table(s$sas_output_ai_review)
     )
   })
   output$comparison_inputs <- shiny::renderUI({
@@ -966,6 +1405,92 @@ pipeline_server <- function(input, output, session) {
       )
     )
   })
+  output$ai_report_summary_view <- shiny::renderUI({
+    if (!nrow(s$ai_report_summary)) {
+      return(NULL)
+    }
+    shiny::tagList(
+      shiny::div(
+        class = "label-row",
+        pill("LOCAL LLM REPORT SUMMARY · DRAFT · VERIFY CITATIONS", "hint")
+      ),
+      html_table(s$ai_report_summary)
+    )
+  })
+
+  shiny::observeEvent(input$ai_triage, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (is.null(s$comparison) || !isTRUE(s$requirements_approved)) {
+      return(shiny::showNotification(
+        "A deterministic comparison and approved requirements baseline are required.",
+        type = "warning"
+      ))
+    }
+    if (!length(s$findings)) {
+      return(shiny::showNotification(
+        "There are no comparison findings to analyze.",
+        type = "message"
+      ))
+    }
+    tryCatch(
+      {
+        s$ai_triage <- local_llm_triage(s$findings, s$requirements, s$llm_model)
+        s$ai_triage_reviewed <- FALSE
+        s$ai_triage_review_note <- ""
+        ctx$log(
+          "Local LLM discrepancy hypotheses generated",
+          sprintf(
+            "model=%s; findings=%d; proposals=%d",
+            s$llm_model,
+            length(s$findings),
+            nrow(s$ai_triage)
+          )
+        )
+        if (!nrow(s$ai_triage)) {
+          shiny::showNotification(
+            "The model returned no hypotheses linked to supplied finding IDs.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM discrepancy triage failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+  shiny::observeEvent(input$save_ai_triage_review, {
+    if (!nrow(s$ai_triage)) {
+      return(shiny::showNotification(
+        "No local AI discrepancy hypotheses are available to review.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$ai_triage_review_attest) ||
+        !nzchar(trimws(input$ai_triage_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$ai_triage_reviewed <- TRUE
+    s$ai_triage_review_note <- trimws(input$ai_triage_review_note)
+    ctx$log(
+      "Human reviewed local AI discrepancy hypotheses",
+      s$ai_triage_review_note
+    )
+  })
 
   for (branch in c("R", "SAS")) {
     local({
@@ -988,6 +1513,82 @@ pipeline_server <- function(input, output, session) {
     s$reviewer <- trimws(input$reviewer %||% s$reviewer)
     s$task <- trimws(input$task %||% s$task)
     s$study_id <- trimws(input$study_id %||% s$study_id)
+  })
+
+  shiny::observeEvent(input$check_local_llm, {
+    s$llm_enabled <- FALSE
+    s$llm_available <- FALSE
+    s$llm_status <- "Checking loopback-only Ollama endpoint..."
+    tryCatch(
+      {
+        models <- local_llm_models()
+        models <- models[nzchar(models)]
+        if (!length(models)) {
+          stop(
+            "Ollama is reachable but has no downloaded models.",
+            call. = FALSE
+          )
+        }
+        s$llm_models <- models
+        configured <- Sys.getenv("ADAM_QC_LOCAL_LLM_MODEL", "")
+        s$llm_model <- if (configured %in% models) configured else models[[1]]
+        s$llm_available <- TRUE
+        s$llm_status <- sprintf(
+          "Local Ollama is reachable; %d model(s) found. AI remains disabled until you attest and enable it.",
+          length(models)
+        )
+        ctx$log("Local LLM models checked", paste(models, collapse = ", "))
+      },
+      error = function(e) {
+        s$llm_status <- paste("Local LLM unavailable:", conditionMessage(e))
+        ctx$log("Local LLM check failed", conditionMessage(e))
+        shiny::showNotification(s$llm_status, type = "warning", duration = 10)
+      }
+    )
+  })
+
+  shiny::observeEvent(
+    input$llm_model,
+    {
+      model <- as.character(input$llm_model %||% "")
+      if (model %in% s$llm_models && !identical(model, s$llm_model)) {
+        s$llm_model <- model
+        s$llm_enabled <- FALSE
+        s$llm_status <- "Model selection changed; re-enable local AI after confirming its use for this task."
+      }
+    },
+    ignoreInit = TRUE
+  )
+
+  shiny::observeEvent(input$enable_local_llm, {
+    if (!isTRUE(s$llm_available) || !s$llm_model %in% s$llm_models) {
+      return(shiny::showNotification(
+        "Check a local Ollama service and select an available model first.",
+        type = "warning"
+      ))
+    }
+    if (!isTRUE(input$local_llm_ack)) {
+      return(shiny::showNotification(
+        "Confirm that this local model and selected study content are approved for this session.",
+        type = "warning"
+      ))
+    }
+    s$llm_enabled <- TRUE
+    s$llm_status <- paste(
+      "Local AI enabled for this session with model",
+      s$llm_model,
+      "at loopback only."
+    )
+    ctx$log(
+      "Local AI enabled",
+      paste("model", s$llm_model, "endpoint", local_llm_endpoint())
+    )
+  })
+
+  shiny::observeEvent(input$disable_local_llm, {
+    s$llm_enabled <- FALSE
+    s$llm_status <- "Local AI disabled for this session."
+    ctx$log("Local AI disabled", paste("model", s$llm_model))
   })
 
   shiny::observeEvent(
@@ -1075,6 +1676,11 @@ pipeline_server <- function(input, output, session) {
       s$requirement_candidates <- empty_requirement_candidates()
     }
     s$requirement_extraction_issues <- issues
+    s$ai_requirement_suggestions <- empty_requirement_candidates()
+    s$ai_requirement_suggestions_reviewed <- FALSE
+    s$ai_requirement_suggestions_decision <- ""
+    s$ai_requirement_suggestions_decision <- ""
+    s$ai_requirement_suggestions_note <- ""
     ctx$log(
       "Document requirement candidates extracted",
       sprintf(
@@ -1112,6 +1718,131 @@ pipeline_server <- function(input, output, session) {
     ctx$log(
       "Draft candidates inserted into editable requirements",
       sprintf("count=%d; review/edit required", nrow(s$requirement_candidates))
+    )
+  })
+
+  shiny::observeEvent(input$ai_requirements, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable an approved local model first. No hosted model is configured.",
+        type = "warning"
+      ))
+    }
+    if (!nrow(s$requirement_candidates)) {
+      return(shiny::showNotification(
+        "Extract document candidates first so model suggestions can cite source evidence.",
+        type = "warning"
+      ))
+    }
+    tryCatch(
+      {
+        proposals <- shiny::withProgress(
+          message = "Generating local AI requirement proposals",
+          value = 0.2,
+          {
+            local_llm_propose_requirements(
+              s$requirement_candidates,
+              s$llm_model
+            )
+          }
+        )
+        s$ai_requirement_suggestions <- proposals
+        s$ai_requirement_suggestions_reviewed <- FALSE
+        s$ai_requirement_suggestions_decision <- ""
+        s$ai_requirement_suggestions_note <- ""
+        ctx$log(
+          "Local LLM requirement proposals generated",
+          sprintf(
+            "model=%s; source_candidates=%d; proposals=%d",
+            s$llm_model,
+            nrow(s$requirement_candidates),
+            nrow(proposals)
+          )
+        )
+        if (!nrow(proposals)) {
+          shiny::showNotification(
+            "The model returned no proposals with valid supplied evidence IDs.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM requirement task failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+
+  shiny::observeEvent(input$append_ai_requirements, {
+    proposals <- s$ai_requirement_suggestions
+    if (!nrow(proposals)) {
+      return(shiny::showNotification(
+        "Generate local AI proposals first.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(s$ai_requirement_suggestions_reviewed) ||
+        !identical(s$ai_requirement_suggestions_decision, "accept")
+    ) {
+      return(shiny::showNotification(
+        "Record an explicit accept disposition before adding AI proposals to the editable draft.",
+        type = "warning"
+      ))
+    }
+    next_id <- nrow(s$requirement_candidates) + seq_len(nrow(proposals))
+    proposals$requirement_id <- sprintf("REQ-%03d", next_id)
+    s$requirement_candidates <- rbind(s$requirement_candidates, proposals)
+    s$requirement_candidates$requirement_id <- sprintf(
+      "REQ-%03d",
+      seq_len(nrow(s$requirement_candidates))
+    )
+    s$ai_requirement_suggestions <- empty_requirement_candidates()
+    s$ai_requirement_suggestions_reviewed <- FALSE
+    s$ai_requirement_suggestions_decision <- ""
+    s$ai_requirement_suggestions_note <- ""
+    ctx$log(
+      "Local LLM proposals added to editable draft candidates",
+      sprintf(
+        "count=%d; model=%s; review required",
+        nrow(proposals),
+        s$llm_model
+      )
+    )
+  })
+  shiny::observeEvent(input$save_ai_requirement_review, {
+    if (!nrow(s$ai_requirement_suggestions)) {
+      return(shiny::showNotification(
+        "No local AI requirement proposals are pending disposition.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$ai_requirement_review_attest) ||
+        !nzchar(trimws(input$ai_requirement_review_note %||% "")) ||
+        !(input$ai_requirement_review_decision %in% c("accept", "reject"))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer rationale are required.",
+        type = "warning"
+      ))
+    }
+    s$ai_requirement_suggestions_reviewed <- TRUE
+    s$ai_requirement_suggestions_decision <- input$ai_requirement_review_decision
+    s$ai_requirement_suggestions_note <- trimws(
+      input$ai_requirement_review_note
+    )
+    ctx$log(
+      "Human disposition of local AI requirement proposals",
+      paste(
+        s$ai_requirement_suggestions_decision,
+        s$ai_requirement_suggestions_note,
+        sep = ": "
+      )
     )
   })
 
@@ -1229,6 +1960,9 @@ pipeline_server <- function(input, output, session) {
     if (
       !length(lines) ||
         !nrow(s$requirement_candidates) ||
+        (nrow(s$ai_requirement_suggestions) > 0L &&
+          (!isTRUE(s$ai_requirement_suggestions_reviewed) ||
+            !identical(s$ai_requirement_suggestions_decision, "reject"))) ||
         !nzchar(trimws(input$conflicts %||% "")) ||
         !nzchar(trimws(input$resolution %||% "")) ||
         !isTRUE(input$req_attest)
@@ -1319,6 +2053,9 @@ pipeline_server <- function(input, output, session) {
             md5 = unname(tools::md5sum(f$datapath)),
             lines = length(strsplit(s$r_program, "\n")[[1]])
           )
+          s$r_ai_review <- empty_llm_review()
+          s$r_ai_review_reviewed <- FALSE
+          s$r_ai_review_note <- ""
           s$r_approved <- FALSE
           s$r_output <- NULL
           s$r_output_meta <- NULL
@@ -1345,11 +2082,108 @@ pipeline_server <- function(input, output, session) {
     },
     ignoreInit = TRUE
   )
+  shiny::observeEvent(input$ai_review_r, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (is.null(s$r_program) || !isTRUE(s$requirements_approved)) {
+      return(shiny::showNotification(
+        "An uploaded R program and approved requirements baseline are required.",
+        type = "warning"
+      ))
+    }
+    tryCatch(
+      {
+        review <- local_llm_review_program(
+          s$r_program,
+          s$requirements,
+          s$llm_model,
+          "R"
+        )
+        s$r_ai_review <- review
+        s$r_ai_review_reviewed <- FALSE
+        s$r_ai_review_note <- ""
+        ctx$log(
+          "Local LLM R code review generated",
+          sprintf(
+            "model=%s; program_md5=%s; findings=%d",
+            s$llm_model,
+            s$r_meta$md5,
+            nrow(review)
+          )
+        )
+        if (!nrow(review)) {
+          shiny::showNotification(
+            "The model returned no requirement-linked review rows.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM R code review failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+  shiny::observeEvent(input$save_r_ai_review, {
+    if (!nrow(s$r_ai_review)) {
+      return(shiny::showNotification(
+        "No local AI R-code review is available to disposition.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$r_ai_review_attest) ||
+        !nzchar(trimws(input$r_ai_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$r_ai_review_reviewed <- TRUE
+    s$r_ai_review_note <- trimws(input$r_ai_review_note)
+    ctx$log(
+      "Human reviewed local AI R-code findings",
+      paste(s$r_meta$md5, s$r_ai_review_note, sep = "; ")
+    )
+  })
+  shiny::observeEvent(input$save_r_output_ai_review, {
+    if (!nrow(s$r_output_ai_review)) {
+      return(shiny::showNotification(
+        "No local AI R-output review is available to disposition.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$r_output_ai_review_attest) ||
+        !nzchar(trimws(input$r_output_ai_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$r_output_ai_reviewed <- TRUE
+    s$r_output_ai_review_note <- trimws(input$r_output_ai_review_note)
+    ctx$log(
+      "Human reviewed local AI R-output findings",
+      paste(s$r_output_meta$md5, s$r_output_ai_review_note, sep = "; ")
+    )
+  })
   shiny::observeEvent(input$approve_r, {
     if (
       is.null(s$r_meta) ||
         !nzchar(trimws(input$r_review %||% "")) ||
-        !isTRUE(input$r_attest)
+        !isTRUE(input$r_attest) ||
+        (nrow(s$r_ai_review) > 0L && !isTRUE(s$r_ai_review_reviewed))
     ) {
       return(shiny::showNotification(
         "Upload the R program, enter reviewer notes, and approve the exact code version.",
@@ -1383,6 +2217,9 @@ pipeline_server <- function(input, output, session) {
       {
         d <- read_dataset(f$datapath, f$name)
         reset_after("trace_r", "Production R output registered or replaced")
+        s$r_output_ai_review <- data.frame()
+        s$r_output_ai_reviewed <- FALSE
+        s$r_output_ai_review_note <- ""
         s$r_output <- d
         s$r_output_meta <- list(
           name = basename(f$name),
@@ -1410,6 +2247,56 @@ pipeline_server <- function(input, output, session) {
       }
     )
   })
+  shiny::observeEvent(input$ai_review_r_output, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (is.null(s$r_output) || !isTRUE(s$requirements_approved)) {
+      return(shiny::showNotification(
+        "A registered R ADaM dataset and approved requirements baseline are required.",
+        type = "warning"
+      ))
+    }
+    tryCatch(
+      {
+        s$r_output_ai_review <- local_llm_review_dataset(
+          s$r_output,
+          s$r_output_meta$name,
+          s$requirements,
+          s$llm_model,
+          "Production R ADaM"
+        )
+        s$r_output_ai_reviewed <- FALSE
+        s$r_output_ai_review_note <- ""
+        ctx$log(
+          "Local LLM R ADaM sample review generated",
+          sprintf(
+            "model=%s; output_md5=%s; proposals=%d; sample_rows<=5",
+            s$llm_model,
+            s$r_output_meta$md5,
+            nrow(s$r_output_ai_review)
+          )
+        )
+        if (!nrow(s$r_output_ai_review)) {
+          shiny::showNotification(
+            "The model returned no requirement-linked dataset review rows.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM R ADaM review failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
 
   shiny::observeEvent(
     input$sas_program_file,
@@ -1432,6 +2319,15 @@ pipeline_server <- function(input, output, session) {
             md5 = unname(tools::md5sum(f$datapath)),
             lines = length(strsplit(s$sas_program, "\n")[[1]])
           )
+          s$sas_generated_by_llm <- FALSE
+          s$sas_ai_review <- empty_llm_review()
+          s$sas_ai_review_reviewed <- FALSE
+          s$sas_ai_review_note <- ""
+          s$sas_ai_assumptions <- character()
+          s$sas_ai_map <- data.frame(
+            requirement_id = character(),
+            code_lines = character()
+          )
           s$sas_approved <- FALSE
           s$sas_output <- NULL
           s$sas_output_meta <- NULL
@@ -1453,11 +2349,195 @@ pipeline_server <- function(input, output, session) {
     },
     ignoreInit = TRUE
   )
+  shiny::observeEvent(input$generate_sas_llm, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (!isTRUE(s$requirements_approved) || !length(s$sdtm)) {
+      return(shiny::showNotification(
+        "An approved requirements baseline and source SDTM schemas are required.",
+        type = "warning"
+      ))
+    }
+    if (!is.null(s$sas_meta)) {
+      return(shiny::showNotification(
+        "A SAS program is already registered. Review or replace it explicitly before requesting another draft.",
+        type = "warning",
+        duration = 8
+      ))
+    }
+    tryCatch(
+      {
+        generated <- shiny::withProgress(
+          message = "Drafting independent SAS QC code locally",
+          value = 0.2,
+          {
+            local_llm_build_sas(s$requirements, s$sdtm, s$llm_model)
+          }
+        )
+        s$sas_program <- generated$code
+        s$sas_meta <- list(
+          name = "local_llm_draft.sas",
+          md5 = local_llm_text_md5(generated$code),
+          lines = length(strsplit(generated$code, "\n", fixed = TRUE)[[1]]),
+          model = s$llm_model
+        )
+        s$sas_generated_by_llm <- TRUE
+        s$sas_ai_assumptions <- unlist(generated$assumptions, use.names = FALSE)
+        s$sas_ai_map <- do.call(
+          rbind,
+          lapply(generated$requirement_map, function(item) {
+            data.frame(
+              requirement_id = as.character(item$requirement_id),
+              code_lines = paste(
+                unlist(item$code_lines %||% character(), use.names = FALSE),
+                collapse = ","
+              ),
+              stringsAsFactors = FALSE
+            )
+          })
+        )
+        if (is.null(s$sas_ai_map)) {
+          s$sas_ai_map <- data.frame(
+            requirement_id = character(),
+            code_lines = character()
+          )
+        }
+        s$sas_approved <- FALSE
+        s$sas_review <- ""
+        s$sas_ai_review <- empty_llm_review()
+        s$sas_ai_review_reviewed <- FALSE
+        s$sas_ai_review_note <- ""
+        s$sas_output <- NULL
+        s$sas_output_meta <- NULL
+        s$sas_trace <- NULL
+        s$sas_trace_approved <- FALSE
+        clear_comparison()
+        ctx$log(
+          "Independent SAS QC draft generated by local LLM",
+          sprintf(
+            "model=%s; source_domains=%d; requirements=%d; code_md5=%s",
+            s$llm_model,
+            length(s$sdtm),
+            nrow(s$requirements),
+            s$sas_meta$md5
+          )
+        )
+      },
+      error = function(e) {
+        ctx$log("Local LLM SAS generation failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+  shiny::observeEvent(input$ai_review_sas, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (is.null(s$sas_program) || !isTRUE(s$requirements_approved)) {
+      return(shiny::showNotification(
+        "A SAS draft and approved requirements baseline are required.",
+        type = "warning"
+      ))
+    }
+    tryCatch(
+      {
+        s$sas_ai_review <- local_llm_review_program(
+          s$sas_program,
+          s$requirements,
+          s$llm_model,
+          "SAS"
+        )
+        s$sas_ai_review_reviewed <- FALSE
+        s$sas_ai_review_note <- ""
+        ctx$log(
+          "Local LLM SAS code review generated",
+          sprintf(
+            "model=%s; program_md5=%s; findings=%d",
+            s$llm_model,
+            s$sas_meta$md5,
+            nrow(s$sas_ai_review)
+          )
+        )
+        if (!nrow(s$sas_ai_review)) {
+          shiny::showNotification(
+            "The model returned no requirement-linked review rows.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM SAS code review failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+  shiny::observeEvent(input$save_sas_ai_review, {
+    if (!nrow(s$sas_ai_review)) {
+      return(shiny::showNotification(
+        "No local AI SAS-code review is available to disposition.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$sas_ai_review_attest) ||
+        !nzchar(trimws(input$sas_ai_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$sas_ai_review_reviewed <- TRUE
+    s$sas_ai_review_note <- trimws(input$sas_ai_review_note)
+    ctx$log(
+      "Human reviewed local AI SAS-code findings",
+      paste(s$sas_meta$md5, s$sas_ai_review_note, sep = "; ")
+    )
+  })
+  shiny::observeEvent(input$save_sas_output_ai_review, {
+    if (!nrow(s$sas_output_ai_review)) {
+      return(shiny::showNotification(
+        "No local AI SAS-output review is available to disposition.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$sas_output_ai_review_attest) ||
+        !nzchar(trimws(input$sas_output_ai_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$sas_output_ai_reviewed <- TRUE
+    s$sas_output_ai_review_note <- trimws(input$sas_output_ai_review_note)
+    ctx$log(
+      "Human reviewed local AI SAS-output findings",
+      paste(s$sas_output_meta$md5, s$sas_output_ai_review_note, sep = "; ")
+    )
+  })
   shiny::observeEvent(input$approve_sas, {
     if (
       is.null(s$sas_meta) ||
         !nzchar(trimws(input$sas_review %||% "")) ||
-        !isTRUE(input$sas_attest)
+        !isTRUE(input$sas_attest) ||
+        (nrow(s$sas_ai_review) > 0L && !isTRUE(s$sas_ai_review_reviewed))
     ) {
       return(shiny::showNotification(
         "Upload SAS code, record review notes, and attest approval.",
@@ -1466,6 +2546,7 @@ pipeline_server <- function(input, output, session) {
     }
     s$sas_review <- trimws(input$sas_review)
     s$sas_approved <- TRUE
+    s$final_approval <- NULL
     ctx$log(
       "SAS QC program approved for external execution",
       sprintf("program_md5=%s; reviewer_notes=%s", s$sas_meta$md5, s$sas_review)
@@ -1494,6 +2575,9 @@ pipeline_server <- function(input, output, session) {
       {
         d <- read_dataset(f$datapath, f$name)
         reset_after("trace_sas", "SAS QC output registered or replaced")
+        s$sas_output_ai_review <- data.frame()
+        s$sas_output_ai_reviewed <- FALSE
+        s$sas_output_ai_review_note <- ""
         s$sas_output <- d
         s$sas_output_meta <- list(
           name = basename(f$name),
@@ -1518,6 +2602,56 @@ pipeline_server <- function(input, output, session) {
       },
       error = function(e) {
         shiny::showNotification(conditionMessage(e), type = "error")
+      }
+    )
+  })
+  shiny::observeEvent(input$ai_review_sas_output, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    if (is.null(s$sas_output) || !isTRUE(s$requirements_approved)) {
+      return(shiny::showNotification(
+        "A registered SAS QC ADaM dataset and approved requirements baseline are required.",
+        type = "warning"
+      ))
+    }
+    tryCatch(
+      {
+        s$sas_output_ai_review <- local_llm_review_dataset(
+          s$sas_output,
+          s$sas_output_meta$name,
+          s$requirements,
+          s$llm_model,
+          "Independent SAS QC ADaM"
+        )
+        s$sas_output_ai_reviewed <- FALSE
+        s$sas_output_ai_review_note <- ""
+        ctx$log(
+          "Local LLM SAS QC ADaM sample review generated",
+          sprintf(
+            "model=%s; output_md5=%s; proposals=%d; sample_rows<=5",
+            s$llm_model,
+            s$sas_output_meta$md5,
+            nrow(s$sas_output_ai_review)
+          )
+        )
+        if (!nrow(s$sas_output_ai_review)) {
+          shiny::showNotification(
+            "The model returned no requirement-linked dataset review rows.",
+            type = "warning"
+          )
+        }
+      },
+      error = function(e) {
+        ctx$log("Local LLM SAS QC ADaM review failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
       }
     )
   })
@@ -1753,6 +2887,9 @@ pipeline_server <- function(input, output, session) {
           vector("list", length(s$findings)),
           vapply(s$findings, `[[`, character(1), "id")
         )
+        s$ai_triage <- data.frame()
+        s$ai_triage_reviewed <- FALSE
+        s$ai_triage_review_note <- ""
         s$cdisc_approved <- FALSE
         s$final_approval <- NULL
         ctx$log(
@@ -1828,12 +2965,82 @@ pipeline_server <- function(input, output, session) {
     })
   }
 
+  shiny::observeEvent(input$ai_report_summary, {
+    if (!isTRUE(s$llm_enabled)) {
+      return(shiny::showNotification(
+        "Enable the approved local model first.",
+        type = "warning"
+      ))
+    }
+    report <- pipeline_report(s)
+    report <- report[
+      report$section != "Local LLM report summary",
+      ,
+      drop = FALSE
+    ]
+    tryCatch(
+      {
+        s$ai_report_summary <- local_llm_summarize_report(report, s$llm_model)
+        s$ai_report_summary_reviewed <- FALSE
+        s$ai_report_summary_review_note <- ""
+        ctx$log(
+          "Local LLM report summary drafted",
+          sprintf(
+            "model=%s; source_rows=%d; cited_refs=%s",
+            s$llm_model,
+            nrow(report),
+            s$ai_report_summary$cited_refs[1]
+          )
+        )
+      },
+      error = function(e) {
+        ctx$log("Local LLM report summary failed", conditionMessage(e))
+        shiny::showNotification(
+          conditionMessage(e),
+          type = "error",
+          duration = 12
+        )
+      }
+    )
+  })
+  shiny::observeEvent(input$save_ai_report_summary_review, {
+    if (!nrow(s$ai_report_summary)) {
+      return(shiny::showNotification(
+        "No local AI report summary is available to review.",
+        type = "warning"
+      ))
+    }
+    if (
+      !isTRUE(input$ai_report_summary_attest) ||
+        !nzchar(trimws(input$ai_report_summary_review_note %||% ""))
+    ) {
+      return(shiny::showNotification(
+        "Review attestation and reviewer note are required.",
+        type = "warning"
+      ))
+    }
+    s$ai_report_summary_reviewed <- TRUE
+    s$ai_report_summary_review_note <- trimws(
+      input$ai_report_summary_review_note
+    )
+    ctx$log(
+      "Human reviewed local AI report summary",
+      s$ai_report_summary_review_note
+    )
+  })
+
   shiny::observeEvent(input$final_approve, {
     if (!pipeline_ready_for_signoff(s)) {
       return(shiny::showNotification(
         "Complete all approvals, evidence links, external validator review, and finding dispositions first.",
         type = "warning",
         duration = 10
+      ))
+    }
+    if (nrow(s$ai_report_summary) && !isTRUE(s$ai_report_summary_reviewed)) {
+      return(shiny::showNotification(
+        "Review or reject the local AI report summary and record your rationale before sign-off.",
+        type = "warning"
       ))
     }
     if (
@@ -1873,13 +3080,19 @@ pipeline_server <- function(input, output, session) {
         !any(s$docs$category %in% c("Unclassified", "Select type")) &&
         !any(!nzchar(s$docs$version)),
       requirements = isTRUE(s$requirements_approved),
-      production_r = isTRUE(s$r_approved) && !is.null(s$r_output),
+      production_r = isTRUE(s$r_approved) &&
+        !is.null(s$r_output) &&
+        (nrow(s$r_output_ai_review) == 0L || isTRUE(s$r_output_ai_reviewed)),
       trace_r = isTRUE(s$r_trace_approved),
-      sas_review = isTRUE(s$sas_approved),
-      sas_output = !is.null(s$sas_output),
+      sas_review = isTRUE(s$sas_approved) &&
+        (nrow(s$sas_ai_review) == 0L || isTRUE(s$sas_ai_review_reviewed)),
+      sas_output = !is.null(s$sas_output) &&
+        (nrow(s$sas_output_ai_review) == 0L ||
+          isTRUE(s$sas_output_ai_reviewed)),
       trace_sas = isTRUE(s$sas_trace_approved),
       compare = !is.null(s$comparison),
-      triage = findings_reviewed(s),
+      triage = findings_reviewed(s) &&
+        (nrow(s$ai_triage) == 0L || isTRUE(s$ai_triage_reviewed)),
       cdisc = isTRUE(s$cdisc_approved),
       signoff = FALSE,
       FALSE
@@ -1907,6 +3120,19 @@ pipeline_server <- function(input, output, session) {
   output$download_audit <- shiny::downloadHandler(
     filename = function() "adam_qc_audit_log.csv",
     content = function(file) utils::write.csv(s$audit, file, row.names = FALSE)
+  )
+  output$download_sas_draft <- shiny::downloadHandler(
+    filename = function() {
+      if (isTRUE(s$sas_generated_by_llm)) {
+        "local_llm_sas_qc_draft.sas"
+      } else {
+        "sas_qc_program_review_copy.sas"
+      }
+    },
+    content = function(file) {
+      shiny::req(!is.null(s$sas_program))
+      writeLines(s$sas_program, file, useBytes = TRUE)
+    }
   )
 
   ctx$log(
@@ -2013,7 +3239,13 @@ pipeline_ready_for_signoff <- function(s) {
     isTRUE(s$sas_trace_approved) &&
     !is.null(s$comparison) &&
     findings_reviewed(s) &&
-    isTRUE(s$cdisc_approved)
+    isTRUE(s$cdisc_approved) &&
+    (nrow(s$r_ai_review) == 0L || isTRUE(s$r_ai_review_reviewed)) &&
+    (nrow(s$r_output_ai_review) == 0L || isTRUE(s$r_output_ai_reviewed)) &&
+    (nrow(s$sas_ai_review) == 0L || isTRUE(s$sas_ai_review_reviewed)) &&
+    (nrow(s$sas_output_ai_review) == 0L || isTRUE(s$sas_output_ai_reviewed)) &&
+    (nrow(s$ai_triage) == 0L || isTRUE(s$ai_triage_reviewed)) &&
+    (nrow(s$ai_report_summary) == 0L || isTRUE(s$ai_report_summary_reviewed))
 }
 
 pipeline_report <- function(s) {
@@ -2095,6 +3327,45 @@ pipeline_report <- function(s) {
       )
     }
   }
+  if (nrow(s$ai_requirement_suggestions)) {
+    for (i in seq_len(nrow(s$ai_requirement_suggestions))) {
+      add(
+        "Local LLM requirement proposal",
+        s$ai_requirement_suggestions$target[i],
+        if (s$ai_requirement_suggestions_reviewed) {
+          "Human disposition recorded; baseline approval separate"
+        } else {
+          "Unverified draft; human disposition pending"
+        },
+        paste(
+          s$ai_requirement_suggestions$source_ref[i],
+          s$ai_requirement_suggestions$rule[i],
+          s$ai_requirement_suggestions$evidence[i],
+          s$ai_requirement_suggestions$extraction_type[i],
+          s$ai_requirement_suggestions_note,
+          sep = " | "
+        )
+      )
+    }
+  }
+  if (nrow(s$r_ai_review)) {
+    for (i in seq_len(nrow(s$r_ai_review))) {
+      add(
+        "Local LLM R code review",
+        s$r_ai_review$requirement_id[i],
+        s$r_ai_review$status[i],
+        paste(
+          s$r_ai_review$source_ref[i],
+          s$r_ai_review$code_ref[i],
+          s$r_ai_review$evidence_quote[i],
+          s$r_ai_review$explanation[i],
+          s$r_ai_review$uncertainty[i],
+          s$r_ai_review$provenance[i],
+          sep = " | "
+        )
+      )
+    }
+  }
   if (!is.null(s$r_output_meta)) {
     add(
       "Production R output",
@@ -2110,6 +3381,29 @@ pipeline_report <- function(s) {
         s$r_output_meta$run_info
       )
     )
+  }
+  if (nrow(s$r_output_ai_review)) {
+    for (i in seq_len(nrow(s$r_output_ai_review))) {
+      add(
+        "Local LLM R ADaM sample review",
+        s$r_output_ai_review$requirement_id[i],
+        s$r_output_ai_review$status[i],
+        paste(
+          s$r_output_ai_review$dataset[i],
+          s$r_output_ai_review$source_ref[i],
+          s$r_output_ai_review$variables[i],
+          s$r_output_ai_review$sample_rows[i],
+          s$r_output_ai_review$observed_evidence[i],
+          s$r_output_ai_review$explanation[i],
+          s$r_output_ai_review$uncertainty[i],
+          s$r_output_ai_review$provenance[i],
+          "human reviewed:",
+          s$r_output_ai_reviewed,
+          s$r_output_ai_review_note,
+          sep = " | "
+        )
+      )
+    }
   }
   if (!is.null(s$r_trace)) {
     for (i in seq_len(nrow(s$r_trace))) {
@@ -2130,7 +3424,50 @@ pipeline_report <- function(s) {
       "Independent SAS QC program",
       s$sas_meta$name,
       if (s$sas_approved) "Human approved" else "Pending",
-      paste("MD5", s$sas_meta$md5, s$sas_review)
+      paste(
+        "MD5",
+        s$sas_meta$md5,
+        if (isTRUE(s$sas_generated_by_llm)) {
+          paste("Local LLM draft model", s$sas_meta$model)
+        } else {
+          "Human-uploaded draft"
+        },
+        s$sas_review
+      )
+    )
+  }
+  if (nrow(s$sas_ai_review)) {
+    for (i in seq_len(nrow(s$sas_ai_review))) {
+      add(
+        "Local LLM SAS code review",
+        s$sas_ai_review$requirement_id[i],
+        s$sas_ai_review$status[i],
+        paste(
+          s$sas_ai_review$source_ref[i],
+          s$sas_ai_review$code_ref[i],
+          s$sas_ai_review$evidence_quote[i],
+          s$sas_ai_review$explanation[i],
+          s$sas_ai_review$uncertainty[i],
+          s$sas_ai_review$provenance[i],
+          sep = " | "
+        )
+      )
+    }
+  }
+  for (i in seq_len(nrow(s$ai_triage))) {
+    add(
+      "Local LLM discrepancy hypothesis",
+      s$ai_triage$finding_id[i],
+      "Unverified hypothesis; human disposition pending",
+      paste(
+        s$ai_triage$possible_cause[i],
+        s$ai_triage$hypothesis[i],
+        s$ai_triage$requirement_refs[i],
+        s$ai_triage$confidence[i],
+        s$ai_triage$next_check[i],
+        s$ai_triage$provenance[i],
+        sep = " | "
+      )
     )
   }
   if (!is.null(s$sas_output_meta)) {
@@ -2148,6 +3485,29 @@ pipeline_report <- function(s) {
         s$sas_output_meta$run_info
       )
     )
+  }
+  if (nrow(s$sas_output_ai_review)) {
+    for (i in seq_len(nrow(s$sas_output_ai_review))) {
+      add(
+        "Local LLM SAS QC ADaM sample review",
+        s$sas_output_ai_review$requirement_id[i],
+        s$sas_output_ai_review$status[i],
+        paste(
+          s$sas_output_ai_review$dataset[i],
+          s$sas_output_ai_review$source_ref[i],
+          s$sas_output_ai_review$variables[i],
+          s$sas_output_ai_review$sample_rows[i],
+          s$sas_output_ai_review$observed_evidence[i],
+          s$sas_output_ai_review$explanation[i],
+          s$sas_output_ai_review$uncertainty[i],
+          s$sas_output_ai_review$provenance[i],
+          "human reviewed:",
+          s$sas_output_ai_reviewed,
+          s$sas_output_ai_review_note,
+          sep = " | "
+        )
+      )
+    }
   }
   if (!is.null(s$sas_trace)) {
     for (i in seq_len(nrow(s$sas_trace))) {
@@ -2216,6 +3576,21 @@ pipeline_report <- function(s) {
     )
   }
   if (!is.null(s$final_approval)) {
+    if (nrow(s$ai_report_summary)) {
+      add(
+        "Local LLM report summary",
+        "AI-proposed narrative",
+        "Draft; reviewer verification required",
+        paste(
+          s$ai_report_summary$summary[1],
+          paste("Cited report rows:", s$ai_report_summary$cited_refs[1]),
+          paste("Open questions:", s$ai_report_summary$open_questions[1]),
+          paste("Limitations:", s$ai_report_summary$limitations[1]),
+          s$ai_report_summary$provenance[1],
+          sep = " | "
+        )
+      )
+    }
     add(
       "Human sign-off",
       s$final_approval$reviewer,
@@ -2223,5 +3598,10 @@ pipeline_report <- function(s) {
       s$final_approval$statement
     )
   }
-  do.call(rbind, rows)
+  report <- do.call(rbind, rows)
+  report$reference_id <- sprintf("REPORT-%04d", seq_len(nrow(report)))
+  report[,
+    c("reference_id", "section", "item", "status", "evidence"),
+    drop = FALSE
+  ]
 }

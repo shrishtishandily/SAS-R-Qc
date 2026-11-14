@@ -138,6 +138,10 @@ shiny::testServer(pipeline_server, {
   session$setInputs(advance = 2)
   stopifnot(s$phase == "requirements")
 
+  s$ai_requirement_suggestions <- transform(
+    s$requirement_candidates,
+    rule = "Local model proposal requiring reviewer disposition"
+  )
   session$setInputs(
     requirement_text = "REQ-001 | ADVS.BASE | ADaM spec v1, section 1 | Derive baseline from source VS",
     conflicts = "None",
@@ -145,6 +149,21 @@ shiny::testServer(pipeline_server, {
     req_attest = TRUE,
     approve_requirements = 1
   )
+  stopifnot(!s$requirements_approved)
+  session$setInputs(save_ai_requirement_review = 1)
+  stopifnot(!s$ai_requirement_suggestions_reviewed)
+  session$setInputs(
+    ai_requirement_review_note = "Accepted after checking the synthetic spec.",
+    ai_requirement_review_decision = "accept",
+    ai_requirement_review_attest = TRUE,
+    save_ai_requirement_review = 2
+  )
+  stopifnot(s$ai_requirement_suggestions_reviewed)
+  session$setInputs(approve_requirements = 2)
+  stopifnot(!s$requirements_approved)
+  session$setInputs(append_ai_requirements = 1)
+  stopifnot(nrow(s$requirement_candidates) == 2L)
+  session$setInputs(approve_requirements = 3)
   stopifnot(s$requirements_approved, s$requirements$requirement_id == "REQ-001")
   stopifnot(
     s$requirements$source_file == "synthetic-adam-spec.pdf",
