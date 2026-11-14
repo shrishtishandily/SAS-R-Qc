@@ -289,7 +289,7 @@ pipeline_server <- function(input, output, session) {
         shiny::h3(class = "sub-head", "Study documents"),
         shiny::p(
           class = "field-help",
-          "Select multiple files at once, or add documents in later selections. Previously registered files stay in the list. Register protocol, SAP, ADaM specifications, Define-XML/metadata, SDTM specifications, and other references. This prototype does not extract document contents; human-entered citations are required later."
+          "Select multiple files at once, or add documents in later selections. Previously registered files stay in the list. Register protocol, SAP, ADaM specifications, Define-XML/metadata, SDTM specifications, and other references. The next phase extracts draft candidates with citations for human review; it does not determine correctness or resolve conflicts."
         ),
         shiny::fileInput(
           ns("documents"),

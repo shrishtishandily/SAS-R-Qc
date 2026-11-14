@@ -74,4 +74,34 @@ stopifnot(
   grepl("spec.txt", lines, fixed = TRUE)
 )
 
+shiny::testServer(pipeline_server, {
+  s$phase <- "requirements"
+  session$flushReact()
+  html <- as.character(output$phase_ui)
+  stopifnot(any(grepl(
+    "Extract candidates from registered documents",
+    html,
+    fixed = TRUE
+  )))
+  stopifnot(any(grepl(
+    "Insert draft candidates into editable requirements",
+    html,
+    fixed = TRUE
+  )))
+
+  s$task <- "ADAE independent QC"
+  s$docs <- data.frame(
+    name = "define.xml",
+    category = "Define-XML / metadata",
+    version = "1.0",
+    citation_note = "",
+    md5 = "synthetic",
+    stringsAsFactors = FALSE
+  )
+  s$artifacts[["document:define.xml"]] <- xml_path
+  session$setInputs(extract_requirements = 1)
+  stopifnot(nrow(s$requirement_candidates) == 3L)
+  stopifnot(all(grepl("ADAE", s$requirement_candidates$target, fixed = TRUE)))
+})
+
 unlink(c(xml_path, text_path))
