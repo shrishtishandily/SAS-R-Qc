@@ -2,14 +2,18 @@
 
 import asyncio
 import os
+import re
+import secrets
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from model_gateway import GatewayError
 
 
 class CopilotAdapter:
-    def _client(self):
+    @asynccontextmanager
+    async def _client(self):
         provider_vars = [
             name for name in os.environ if name.startswith("COPILOT_PROVIDER")
         ]
@@ -26,17 +30,71 @@ class CopilotAdapter:
                 "Custom Copilot provider configuration detected; this prototype permits GitHub Copilot only."
             )
         try:
-            from copilot import CopilotClient
+            from copilot import CopilotClient, RuntimeConnection
         except ImportError as error:
             raise GatewayError(
                 "Install the Python dependencies in backend/requirements.txt."
             ) from error
-        return CopilotClient(
-            mode="empty",
-            base_directory=str(copilot_home),
-            working_directory=tempfile.gettempdir(),
-            env={**os.environ, "COPILOT_SKIP_CLI_DOWNLOAD": "1"},
+        cli = os.environ.get("ADAM_QC_COPILOT_CLI")
+        if not cli and os.name == "nt":
+            cli = str(
+                Path(os.environ.get("LOCALAPPDATA", ""))
+                / "adam-qc-copilot-cli"
+                / "1.0.112"
+                / "copilot.exe"
+            )
+        if not cli or not Path(cli).is_file():
+            raise GatewayError(
+                "Copilot CLI not found. Set ADAM_QC_COPILOT_CLI to the signed-in CLI executable."
+            )
+        token = secrets.token_urlsafe(32)
+        env = {**os.environ, "COPILOT_CONNECTION_TOKEN": token}
+        if (
+            os.name == "nt"
+            and not os.environ.get("COPILOT_HOME")
+            and env.get("USERPROFILE")
+        ):
+            env["HOME"] = env["USERPROFILE"]
+        env.pop("COPILOT_DISABLE_KEYTAR", None)
+        process = await asyncio.create_subprocess_exec(
+            cli,
+            "--headless",
+            "--host",
+            "127.0.0.1",
+            "--disable-builtin-mcps",
+            "--no-auto-update",
+            cwd=tempfile.gettempdir(),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
+        try:
+
+            async def find_port():
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        raise GatewayError(
+                            "Copilot runtime stopped before becoming ready."
+                        )
+                    match = re.search(rb"listening on port (\d+)", line, re.IGNORECASE)
+                    if match:
+                        return int(match.group(1))
+
+            port = await asyncio.wait_for(find_port(), timeout=30)
+            connection = RuntimeConnection.for_uri(
+                f"127.0.0.1:{port}", connection_token=token
+            )
+            async with CopilotClient(mode="empty", connection=connection) as client:
+                yield client
+        finally:
+            if process.returncode is None:
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
 
     async def models(self):
         try:

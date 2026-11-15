@@ -64,7 +64,7 @@ Sys.setenv(ADAM_QC_PYTHON = normalizePath(".venv/Scripts/python.exe"))
 shiny::runApp()
 ```
 
-The Python gateway is started on demand as a local child process; no separate backend server or open listening port is needed. The SDK runtime download is an explicit setup step. If custom Copilot provider configuration is detected, the gateway fails closed instead of silently switching providers. This phase has mocked tests, not a verified live model response.
+The Python gateway starts a separate signed-in Copilot CLI process for each request. It listens only on loopback with a randomly generated connection token and is stopped after the request. The SDK connects in `empty` mode with no tools or skills; do not expose this prototype as a multi-user service. On Windows, the CLI installed during setup is detected automatically. For another installation or platform, set `ADAM_QC_COPILOT_CLI` to the signed-in Copilot CLI executable before starting Shiny. If custom Copilot provider configuration is detected, the gateway fails closed instead of silently switching providers. Requests to GitHub Copilot remain hosted and use your account allowance.
 
 ## Requirements and launch
 
