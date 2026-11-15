@@ -25,6 +25,7 @@ new_pipeline_store <- function() {
     requirement_candidates = empty_requirement_candidates(),
     requirement_extraction_issues = character(),
     ai_requirement_suggestions = empty_requirement_candidates(),
+    ai_requirement_model = "",
     ai_requirement_suggestions_reviewed = FALSE,
     ai_requirement_suggestions_decision = "",
     ai_requirement_suggestions_note = "",
@@ -131,7 +132,7 @@ pipeline_transition <- function(store, to, ctx) {
 }
 
 pipeline_server <- function(input, output, session) {
-  copilot_panel_server(input, output, session)
+  copilot_state <- copilot_panel_server(input, output, session)
   s <- new_pipeline_store()
   ctx <- list(store = s, log = function(event, detail = "") {
     audit <- shiny::isolate(s$audit)
@@ -177,8 +178,15 @@ pipeline_server <- function(input, output, session) {
       s$requirement_candidates <- empty_requirement_candidates()
       s$requirement_extraction_issues <- character()
       s$ai_requirement_suggestions <- empty_requirement_candidates()
+      s$ai_requirement_model <- ""
       s$ai_requirement_suggestions_reviewed <- FALSE
+      s$ai_requirement_suggestions_decision <- ""
       s$ai_requirement_suggestions_note <- ""
+      shiny::updateCheckboxInput(
+        session,
+        "copilot_requirements_confirm",
+        value = FALSE
+      )
       s$requirements_approved <- FALSE
       s$r_program <- NULL
       s$r_meta <- NULL
@@ -437,9 +445,14 @@ pipeline_server <- function(input, output, session) {
           "Extract candidates from registered documents",
           class = "btn-secondary-wide"
         ),
+        shiny::checkboxInput(
+          ns("copilot_requirements_confirm"),
+          "I confirm all extracted excerpts are synthetic and authorize sending them to GitHub Copilot.",
+          FALSE
+        ),
         shiny::actionButton(
           ns("ai_requirements"),
-          "Ask local AI to organize extracted evidence",
+          "Ask Copilot to organize synthetic evidence",
           class = "btn-secondary-wide"
         ),
         shiny::uiOutput(ns("candidate_status")),
@@ -447,7 +460,7 @@ pipeline_server <- function(input, output, session) {
         shiny::uiOutput(ns("ai_requirement_view")),
         shiny::textAreaInput(
           ns("ai_requirement_review_note"),
-          "Reviewer disposition of local AI requirement proposals",
+          "Reviewer disposition of Copilot requirement proposals",
           rows = 2
         ),
         shiny::radioButtons(
@@ -461,7 +474,7 @@ pipeline_server <- function(input, output, session) {
         ),
         shiny::checkboxInput(
           ns("ai_requirement_review_attest"),
-          "I reviewed all local AI proposals and this accept/reject decision matches the rationale below.",
+          "I reviewed all Copilot proposals and this accept/reject decision matches the rationale below.",
           FALSE
         ),
         shiny::actionButton(
@@ -1042,7 +1055,7 @@ pipeline_server <- function(input, output, session) {
     shiny::tagList(
       shiny::div(
         class = "label-row",
-        pill("LOCAL LLM PROPOSALS · UNVERIFIED", "hint")
+        pill("COPILOT PROPOSALS · UNVERIFIED", "hint")
       ),
       html_table(s$ai_requirement_suggestions, max_rows = 200L)
     )
@@ -1577,6 +1590,11 @@ pipeline_server <- function(input, output, session) {
       if (is.null(f)) {
         return()
       }
+      shiny::updateCheckboxInput(
+        session,
+        "copilot_requirements_confirm",
+        value = FALSE
+      )
       if (s$requirements_approved || s$phase != "workspace") {
         reset_after("workspace", "Study document set changed")
       }
@@ -1606,6 +1624,11 @@ pipeline_server <- function(input, output, session) {
   )
 
   shiny::observeEvent(input$extract_requirements, {
+    shiny::updateCheckboxInput(
+      session,
+      "copilot_requirements_confirm",
+      value = FALSE
+    )
     if (!nrow(s$docs)) {
       return(shiny::showNotification(
         "Register study documents before extracting candidates.",
@@ -1656,8 +1679,8 @@ pipeline_server <- function(input, output, session) {
     }
     s$requirement_extraction_issues <- issues
     s$ai_requirement_suggestions <- empty_requirement_candidates()
+    s$ai_requirement_model <- ""
     s$ai_requirement_suggestions_reviewed <- FALSE
-    s$ai_requirement_suggestions_decision <- ""
     s$ai_requirement_suggestions_decision <- ""
     s$ai_requirement_suggestions_note <- ""
     ctx$log(
@@ -1701,9 +1724,26 @@ pipeline_server <- function(input, output, session) {
   })
 
   shiny::observeEvent(input$ai_requirements, {
-    if (!isTRUE(s$llm_enabled)) {
+    if (isTRUE(s$requirements_approved)) {
       return(shiny::showNotification(
-        "Enable an approved local model first. No hosted model is configured.",
+        "The baseline is approved. Re-extract requirements before requesting new proposals.",
+        type = "warning"
+      ))
+    }
+    if (!isTRUE(input$copilot_requirements_confirm)) {
+      return(shiny::showNotification(
+        "Confirm that all extracted excerpts are synthetic before sending them to Copilot.",
+        type = "warning"
+      ))
+    }
+    model <- input$copilot_model %||% ""
+    if (
+      !nzchar(model) ||
+        !nrow(copilot_state$models) ||
+        !(model %in% copilot_state$models$id)
+    ) {
+      return(shiny::showNotification(
+        "Check the Copilot connection and select a model in the Copilot synthetic test panel first.",
         type = "warning"
       ))
     }
@@ -1716,24 +1756,28 @@ pipeline_server <- function(input, output, session) {
     tryCatch(
       {
         proposals <- shiny::withProgress(
-          message = "Generating local AI requirement proposals",
+          message = "Generating Copilot requirement proposals",
           value = 0.2,
           {
             local_llm_propose_requirements(
               s$requirement_candidates,
-              s$llm_model
+              model,
+              chat = copilot_requirement_chat,
+              provider = "GitHub Copilot",
+              batch_size = 5L
             )
           }
         )
         s$ai_requirement_suggestions <- proposals
+        s$ai_requirement_model <- model
         s$ai_requirement_suggestions_reviewed <- FALSE
         s$ai_requirement_suggestions_decision <- ""
         s$ai_requirement_suggestions_note <- ""
         ctx$log(
-          "Local LLM requirement proposals generated",
+          "Copilot requirement proposals generated",
           sprintf(
             "model=%s; source_candidates=%d; proposals=%d",
-            s$llm_model,
+            model,
             nrow(s$requirement_candidates),
             nrow(proposals)
           )
@@ -1746,7 +1790,7 @@ pipeline_server <- function(input, output, session) {
         }
       },
       error = function(e) {
-        ctx$log("Local LLM requirement task failed", conditionMessage(e))
+        ctx$log("Copilot requirement task failed", conditionMessage(e))
         shiny::showNotification(
           conditionMessage(e),
           type = "error",
@@ -1760,7 +1804,7 @@ pipeline_server <- function(input, output, session) {
     proposals <- s$ai_requirement_suggestions
     if (!nrow(proposals)) {
       return(shiny::showNotification(
-        "Generate local AI proposals first.",
+        "Generate Copilot proposals first.",
         type = "warning"
       ))
     }
@@ -1785,18 +1829,18 @@ pipeline_server <- function(input, output, session) {
     s$ai_requirement_suggestions_decision <- ""
     s$ai_requirement_suggestions_note <- ""
     ctx$log(
-      "Local LLM proposals added to editable draft candidates",
+      "Copilot proposals added to editable draft candidates",
       sprintf(
         "count=%d; model=%s; review required",
         nrow(proposals),
-        s$llm_model
+        s$ai_requirement_model
       )
     )
   })
   shiny::observeEvent(input$save_ai_requirement_review, {
     if (!nrow(s$ai_requirement_suggestions)) {
       return(shiny::showNotification(
-        "No local AI requirement proposals are pending disposition.",
+        "No Copilot requirement proposals are pending disposition.",
         type = "warning"
       ))
     }
@@ -1816,7 +1860,7 @@ pipeline_server <- function(input, output, session) {
       input$ai_requirement_review_note
     )
     ctx$log(
-      "Human disposition of local AI requirement proposals",
+      "Human disposition of Copilot requirement proposals",
       paste(
         s$ai_requirement_suggestions_decision,
         s$ai_requirement_suggestions_note,
@@ -3309,7 +3353,7 @@ pipeline_report <- function(s) {
   if (nrow(s$ai_requirement_suggestions)) {
     for (i in seq_len(nrow(s$ai_requirement_suggestions))) {
       add(
-        "Local LLM requirement proposal",
+        "Copilot requirement proposal",
         s$ai_requirement_suggestions$target[i],
         if (s$ai_requirement_suggestions_reviewed) {
           "Human disposition recorded; baseline approval separate"

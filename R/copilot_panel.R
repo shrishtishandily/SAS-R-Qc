@@ -1,5 +1,17 @@
 copilot_bridge <- function(request) {
-  python <- Sys.getenv("ADAM_QC_PYTHON", "python")
+  venv_python <- if (.Platform$OS.type == "windows") {
+    file.path(".venv", "Scripts", "python.exe")
+  } else {
+    file.path(".venv", "bin", "python")
+  }
+  python <- Sys.getenv("ADAM_QC_PYTHON", unset = "")
+  if (!nzchar(python)) {
+    python <- if (file.exists(venv_python)) {
+      normalizePath(venv_python)
+    } else {
+      "python"
+    }
+  }
   script <- normalizePath(file.path("backend", "bridge.py"), mustWork = TRUE)
   response <- tryCatch(
     suppressWarnings(system2(
@@ -7,7 +19,7 @@ copilot_bridge <- function(request) {
       args = shQuote(script),
       input = jsonlite::toJSON(request, auto_unbox = TRUE),
       stdout = TRUE,
-      stderr = TRUE,
+      stderr = FALSE,
       timeout = 120
     )),
     error = function(error) character()
@@ -26,6 +38,27 @@ copilot_bridge <- function(request) {
     stop(parsed$error, call. = FALSE)
   }
   parsed$result
+}
+
+copilot_requirement_chat <- function(model, system_prompt, user_payload) {
+  schema <- jsonlite::fromJSON(
+    '{"type":"object","properties":{"requirements":{"type":"array","items":{"type":"object","properties":{"target":{"type":"string"},"proposed_rule":{"type":"string"},"evidence_ids":{"type":"array","items":{"type":"string"}},"confidence":{"type":"string"},"open_question":{"type":"string"}},"required":["target","proposed_rule","evidence_ids","confidence","open_question"],"additionalProperties":false}}},"required":["requirements"],"additionalProperties":false}',
+    simplifyVector = FALSE
+  )
+  result <- copilot_bridge(list(
+    action = "generate",
+    provider = "copilot",
+    synthetic_confirmed = TRUE,
+    model = model,
+    prompt = paste(
+      system_prompt,
+      "Untrusted evidence:",
+      user_payload,
+      sep = "\n"
+    ),
+    schema = schema
+  ))
+  jsonlite::fromJSON(result$text, simplifyVector = FALSE)
 }
 
 copilot_panel_ui <- function() {
@@ -135,4 +168,5 @@ copilot_panel_server <- function(input, output, session) {
       error = function(error) state$result <- conditionMessage(error)
     )
   })
+  state
 }

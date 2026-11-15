@@ -118,8 +118,14 @@ local_llm_evidence_batches <- function(candidates, batch_size = 12L) {
   split(candidates, ceiling(seq_len(nrow(candidates)) / batch_size))
 }
 
-local_llm_propose_requirements <- function(candidates, model) {
-  batches <- local_llm_evidence_batches(candidates)
+local_llm_propose_requirements <- function(
+  candidates,
+  model,
+  chat = local_llm_chat_json,
+  provider = "Local LLM",
+  batch_size = 12L
+) {
+  batches <- local_llm_evidence_batches(candidates, batch_size = batch_size)
   output <- list()
   system_prompt <- paste(
     "You assist with ADaM requirement extraction. You are not an approver.",
@@ -138,7 +144,7 @@ local_llm_propose_requirements <- function(candidates, model) {
         extraction_type = batch$extraction_type[i]
       )
     })
-    result <- local_llm_chat_json(
+    result <- chat(
       model,
       system_prompt,
       jsonlite::toJSON(evidence, auto_unbox = TRUE, dataframe = "rows")
@@ -167,7 +173,8 @@ local_llm_propose_requirements <- function(candidates, model) {
           collapse = "\n"
         ),
         extraction_type = sprintf(
-          "Local LLM %s proposed; confidence=%s; evidence IDs=%s; question=%s",
+          "%s %s proposed; confidence=%s; evidence IDs=%s; question=%s",
+          provider,
           model,
           entry$confidence %||% "unspecified",
           paste(evidence_ids, collapse = ","),

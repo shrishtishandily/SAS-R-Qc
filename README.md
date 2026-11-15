@@ -45,7 +45,7 @@ The prototype uses its own deterministic R implementation rather than `diffdf` o
 
 The optional Copilot panel sends manually entered text to GitHub Copilot's hosted service. Use entirely synthetic text only; never paste study documents, real records, source code, logs, or credentials. The checkbox is an operator attestation, not a data-loss-prevention control. Nothing is sent on startup. A connection check requires the checkbox; generation additionally requires a model returned by that check. Responses are drafts and do not alter QC state or approvals.
 
-The existing Ollama implementation is retained for compatibility but its activation and connection controls are disabled. The existing workflow AI buttons are not connected to Copilot; requirements extraction, code review, SAS generation, and discrepancy investigation through Copilot are future phases. No fallback provider is configured. The SDK runs in `empty` mode with an explicit empty tool list, without access to uploaded app artifacts. Its runtime may still keep session state according to its own behavior; consult GitHub's data handling policies. This is not an isolation boundary suitable for real study data.
+The requirements phase can send extracted, explicitly confirmed synthetic excerpts to Copilot for draft suggestions. First check the Copilot connection and select a model in the test panel, extract candidates, then confirm the excerpts are synthetic and request proposals. Source IDs are checked against supplied candidates, but valid citations do not establish that the model's interpretation is correct. Review and disposition every proposal before baseline approval. Changing documents or re-extracting requires fresh confirmation. The existing Ollama implementation is retained but its activation is disabled; other workflow AI actions are not connected to Copilot. No fallback provider is configured. The SDK runs in `empty` mode with an explicit empty tool list. Its runtime may still keep session state according to its own behavior; consult GitHub's data handling policies. This is not an isolation boundary suitable for real study data.
 
 GitHub documents the Copilot SDK for embedding in standalone applications with a Copilot subscription and authenticated CLI credentials. The Python SDK requires Python 3.11+ and a compatible runtime; model availability depends on the signed-in account. SDK usage consumes Copilot allowance and may incur extra charges depending on plan and budget. Check your [billing and budget](https://docs.github.com/en/copilot/concepts/billing-and-usage/individuals/billing), including whether your account uses legacy request-based billing. The model list does not guarantee access or available credits. A successful account login in Positron does not necessarily mean the separate runtime is authenticated.
 
@@ -94,6 +94,7 @@ source("tests/test_pipeline.R")
 source("tests/test_extraction.R")
 source("tests/test_local_llm.R")
 source("tests/test_copilot_panel.R")
+source("tests/test_copilot_requirements.R")
 ```
 
 Run the Python gateway tests with `.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_copilot_gateway.py`. The tests use synthetic fixtures and mocked model calls; they do not launch the app, contact Copilot, or run uploaded programs.
