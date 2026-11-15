@@ -131,6 +131,7 @@ pipeline_transition <- function(store, to, ctx) {
 }
 
 pipeline_server <- function(input, output, session) {
+  copilot_panel_server(input, output, session)
   s <- new_pipeline_store()
   ctx <- list(store = s, log = function(event, detail = "") {
     audit <- shiny::isolate(s$audit)
@@ -430,36 +431,6 @@ pipeline_server <- function(input, output, session) {
         shiny::p(
           class = "field-help",
           "Extraction creates candidates only. Define-XML supplies dataset/variable metadata; PDF, Word, text, CSV, and Excel extract relevant passages with page, paragraph, sheet, or document citations where available. It does not determine correctness or resolve conflicts."
-        ),
-        shiny::div(
-          class = "panel llm-panel",
-          shiny::h3(class = "sub-head", "Optional local AI assistant"),
-          shiny::p(
-            class = "field-help",
-            "No hosted model is used. This connects only to Ollama on this computer (127.0.0.1). Check the local service, select a model, and explicitly enable it for this session. Do not send sensitive study content unless local model use is approved."
-          ),
-          shiny::actionButton(
-            ns("check_local_llm"),
-            "Check local Ollama models",
-            class = "btn-ghost"
-          ),
-          shiny::uiOutput(ns("local_llm_model_picker")),
-          shiny::checkboxInput(
-            ns("local_llm_ack"),
-            "I confirm this local model and the selected documents are approved for this session.",
-            FALSE
-          ),
-          shiny::actionButton(
-            ns("enable_local_llm"),
-            "Enable local AI for this session",
-            class = "btn-secondary-wide"
-          ),
-          shiny::actionButton(
-            ns("disable_local_llm"),
-            "Disable local AI",
-            class = "btn-ghost"
-          ),
-          shiny::uiOutput(ns("local_llm_status"))
         ),
         shiny::actionButton(
           ns("extract_requirements"),
@@ -1516,6 +1487,10 @@ pipeline_server <- function(input, output, session) {
   })
 
   shiny::observeEvent(input$check_local_llm, {
+    return(shiny::showNotification(
+      "Local model activation is disabled in this Copilot-only prototype.",
+      type = "warning"
+    ))
     s$llm_enabled <- FALSE
     s$llm_available <- FALSE
     s$llm_status <- "Checking loopback-only Ollama endpoint..."
@@ -1561,6 +1536,10 @@ pipeline_server <- function(input, output, session) {
   )
 
   shiny::observeEvent(input$enable_local_llm, {
+    return(shiny::showNotification(
+      "Local model activation is disabled in this Copilot-only prototype.",
+      type = "warning"
+    ))
     if (!isTRUE(s$llm_available) || !s$llm_model %in% s$llm_models) {
       return(shiny::showNotification(
         "Check a local Ollama service and select an available model first.",

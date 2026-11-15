@@ -18,15 +18,15 @@ Each next step is gated on required human approvals. The SAS output screen is re
 |---|---|
 | Study inputs | Register protocol, SAP, ADaM specs, Define-XML/metadata, other documents, source SDTM domains, and supporting ADSL/other ADaM datasets; enter document type/version and task/reviewer. Dataset/document pickers accept multiple files and later upload batches accumulate; same-name files replace the prior entry. The generated target ADaM output is uploaded separately in the Production R phase. |
 | Requirements baseline | Extract draft candidates from registered Define-XML, PDFs, DOCX, text, CSV, and Excel files; review exact source citations/evidence, edit the candidate rules, resolve conflicts, and obtain human approval. Extraction does not determine correctness or approve a baseline. |
-| Production R | Register and review R source/checksum; optionally request a local-LLM requirement review; human-review AI findings; approve the exact code; run it externally; register the output and run-manifest reference. |
+| Production R | Register and review R source/checksum; approve the exact code; run it externally; register the output and run-manifest reference. |
 | R traceability | Manually link each requirement to document/source, R program line, output evidence, and coverage; reviewer approves the trace. |
-| Independent SAS QC | Optionally draft SAS from only approved requirements and SDTM schema with local AI, or upload an independent draft; review code, citations, AI review findings, and assumptions; approve its checksum. The SAS prompt does not include production R source. This single Shiny process does not technically enforce blinding. |
-| SAS QC output | Run the approved SAS program externally and register output, SAS version/log reference, and executed checksum; optionally request a local-LLM sample review of schema and first five rows against requirements. |
+| Independent SAS QC | Upload an independent draft; review code and approve its checksum. This single Shiny process does not technically enforce blinding. |
+| SAS QC output | Run the approved SAS program externally and register output, SAS version/log reference, and executed checksum. |
 | SAS traceability | Manually link requirements to SAS lines and output evidence; reviewer approves. |
 | Deterministic comparison | Choose key variables and numeric tolerance; approve the comparison profile; compare output datasets using the prototype comparator. Source programs are not passed to the comparator. |
-| Difference review | Inspect deterministic evidence and rule-based hints; optionally ask local AI for evidence-linked hypotheses; record human review/disposition for every finding and AI hypothesis. Findings without disposition block sign-off. |
+| Difference review | Inspect deterministic evidence and rule-based hints; record human review/disposition for every finding. Findings without disposition block sign-off. |
 | CDISC review | Upload external validation report(s), identify validator/ruleset/standards versions, and record human review. Validation itself is not run by the prototype. |
-| Report/sign-off | Optionally draft a local-LLM summary citing report row IDs; verify/reject the summary, then review the consolidated CSV and audit CSV, enter a conclusion, and attest. Sign-off is session-local and not a validated signature. |
+| Report/sign-off | Review the consolidated CSV and audit CSV, enter a conclusion, and attest. Sign-off is session-local and not a validated signature. |
 
 ## Provenance labels and interpretation
 
@@ -41,23 +41,30 @@ A matching result does not prove that either implementation meets study intent. 
 
 The prototype uses its own deterministic R implementation rather than `diffdf` or SAS `PROC COMPARE`. It compares common variables after matching records on selected keys, checks one-sided variables/records, duplicate keys, type differences, missingness, and value differences. Key variables are required in the staged workflow; row-order matching is disabled there. Numeric comparison uses an absolute tolerance (default `1e-8`). Character trimming, date conversion, and type-conversion behavior are implemented in `R/compare.R`. Review and validate these semantics for the intended standards before relying on them; this prototype comparator is not formally validated.
 
-## Optional Local AI
+## Copilot Synthetic Test
 
-No hosted model is used. AI actions are disabled until the reviewer explicitly checks a local Ollama service, selects an installed model, and attests that the model and selected content are approved for the session. The adapter only accepts a loopback URL (`localhost`, `127.0.0.1`, or `::1`) and does not follow redirects. If Ollama is absent/unavailable, all deterministic extraction and QC workflow functions remain usable; AI actions report that the local service is unavailable.
+The optional Copilot panel sends manually entered text to GitHub Copilot's hosted service. Use entirely synthetic text only; never paste study documents, real records, source code, logs, or credentials. The checkbox is an operator attestation, not a data-loss-prevention control. Nothing is sent on startup. A connection check requires the checkbox; generation additionally requires a model returned by that check. Responses are drafts and do not alter QC state or approvals.
 
-To enable local AI, install and start Ollama separately, download a model appropriate for the computer, then restart this app and use **Check local Ollama models** → select the model → attest → **Enable local AI for this session**. No Ollama installation, model download, or external request is performed by this project. The endpoint can be configured with `ADAM_QC_LOCAL_LLM_URL`, but it is rejected unless it resolves textually to loopback. `ADAM_QC_LOCAL_LLM_MODEL` can select an installed model as the initial choice.
+The existing Ollama implementation is retained for compatibility but its activation and connection controls are disabled. The existing workflow AI buttons are not connected to Copilot; requirements extraction, code review, SAS generation, and discrepancy investigation through Copilot are future phases. No fallback provider is configured. The SDK runs in `empty` mode with an explicit empty tool list, without access to uploaded app artifacts. Its runtime may still keep session state according to its own behavior; consult GitHub's data handling policies. This is not an isolation boundary suitable for real study data.
 
-Local AI tasks are limited to:
+GitHub documents the Copilot SDK for embedding in standalone applications with a Copilot subscription and authenticated CLI credentials. The Python SDK requires Python 3.11+ and a compatible runtime; model availability depends on the signed-in account. SDK usage consumes Copilot allowance and may incur extra charges depending on plan and budget. Check your [billing and budget](https://docs.github.com/en/copilot/concepts/billing-and-usage/individuals/billing), including whether your account uses legacy request-based billing. The model list does not guarantee access or available credits. A successful account login in Positron does not necessarily mean the separate runtime is authenticated.
 
-- Organizing extracted document/Define-XML candidates into proposed rules, citing only supplied extraction IDs and preserving the source passages.
-- Reviewing uploaded production R code against the approved baseline; the application proposes findings with bounded line references.
-- Drafting an independent SAS QC program from approved requirements and SDTM column/type schemas. The SAS-generation request does not include production R source or R output. The result is a draft and must be reviewed before external SAS execution.
-- Reviewing the SAS draft against the baseline, and reviewing the R/SAS output schema plus only the first five data rows against the baseline.
-- Suggesting possible causes for deterministic differences and drafting an evidence-linked report summary.
+Install Python 3.11+ and, from the project directory, run in PowerShell:
 
-All model content is untrusted. Source document/program instructions embedded in text are treated as evidence, not followed as instructions. Responses must cite supplied requirement/finding IDs; code line and sample-row references are range checked. Invalid IDs are dropped. Prompts have explicit payload caps for code, requirements, and report rows. Every output is labeled as a local-model proposal; any generated SAS code, sample-based dataset finding, discrepancy hypothesis, or report summary requires a reviewer rationale/attestation before workflow sign-off. AI never changes a source document/program, executes code, performs the deterministic comparison, or approves a result.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+.\.venv\Scripts\python.exe -m copilot download-runtime
+```
 
-This integration has not been run against an installed model on this machine: Ollama was not found and its local endpoint was unavailable during implementation. Adapter behavior is covered with mocked responses; install/configure Ollama locally before evaluating real model behavior. Keep the prototype on synthetic data. A local endpoint is not automatically secure or validated, and this Shiny process does not technically enforce SAS/R blinding.
+Sign in using the official GitHub Copilot CLI (`copilot login`) if not already authenticated. Credentials stay in the CLI's credential storage, not app source or the browser. Review the [CLI authentication documentation](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference) and [SDK authentication documentation](https://github.com/github/copilot-sdk/blob/main/docs/auth/authenticate.md). Set the interpreter in the R session before launching the app:
+
+```r
+Sys.setenv(ADAM_QC_PYTHON = normalizePath(".venv/Scripts/python.exe"))
+shiny::runApp()
+```
+
+The Python gateway is started on demand as a local child process; no separate backend server or open listening port is needed. The SDK runtime download is an explicit setup step. If custom Copilot provider configuration is detected, the gateway fails closed instead of silently switching providers. This phase has mocked tests, not a verified live model response.
 
 ## Requirements and launch
 
@@ -86,6 +93,7 @@ source("tests/test_server.R")
 source("tests/test_pipeline.R")
 source("tests/test_extraction.R")
 source("tests/test_local_llm.R")
+source("tests/test_copilot_panel.R")
 ```
 
-The tests use synthetic fixtures and Shiny's headless `testServer()`; they do not launch the app or run uploaded programs.
+Run the Python gateway tests with `.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_copilot_gateway.py`. The tests use synthetic fixtures and mocked model calls; they do not launch the app, contact Copilot, or run uploaded programs.

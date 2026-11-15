@@ -78,10 +78,11 @@ pipeline_ui <- function(request) {
           shiny::div(
             shiny::strong("Prototype — not a validated system"),
             shiny::p(
-              "Document parsing creates cited draft candidates. Optional AI tasks connect only to an explicitly enabled local Ollama service; no hosted model is used. AI suggestions never approve, edit, or execute code. R and SAS runs and CDISC checks happen externally. This single Shiny process cannot technically enforce SAS/R blinding. Synthetic data only; session approvals/audit are not validated controls."
+              "Synthetic data only. The optional Copilot test panel sends entered text to a hosted service. AI suggestions never approve, edit, or execute code. R and SAS runs and CDISC checks happen externally. This single Shiny process cannot technically enforce SAS/R blinding; session approvals/audit are not validated controls."
             )
           )
         ),
+        copilot_panel_ui(),
         shiny::uiOutput("workflow_steps"),
         shiny::uiOutput("phase_ui"),
         shiny::div(

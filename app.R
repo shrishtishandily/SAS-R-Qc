@@ -7,6 +7,7 @@ source_files <- c(
   "compare",
   "findings",
   "data",
+  "copilot_panel",
   "pipeline_ui",
   "pipeline_server"
 )
